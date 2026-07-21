@@ -1,0 +1,175 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--app-body-bg, #f0f3f4);
+  transition: background 0.25s ease;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-login-bg);
+  transition: background 0.25s ease;
+}
+
+.login-card {
+  width: 400px;
+  background: var(--app-login-card-bg) !important;
+  border: none;
+}
+
+.login-card--blur {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.login-title {
+  text-align: center;
+  color: var(--app-login-title-color) !important;
+}
+
+.login-subtitle {
+  text-align: center;
+  color: var(--app-login-subtitle-color) !important;
+}
+
+.app-shell {
+  background: var(--app-body-bg, #f5f5f5);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-logo-mark {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.app-logo-mark i {
+  display: block;
+  border-radius: 2px;
+  background: var(--ant-color-primary, #209e91);
+}
+
+.app-logo-mark i:nth-child(2),
+.app-logo-mark i:nth-child(3) {
+  opacity: 0.55;
+}
+
+.app-logo-img {
+  height: 24px;
+  width: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.app-header {
+  background: #ffffff !important;
+  color: var(--app-header-text, #333);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  height: 64px;
+  line-height: 64px;
+  border-bottom: 1px solid #ececec;
+  width: 100%;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 4px;
+}
+
+.app-header-brand-title {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: #222 !important;
+}
+
+.app-header-menu-btn {
+  color: #666 !important;
+}
+
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.app-sider {
+  background: #ffffff !important;
+  border-right: 1px solid #ececec !important;
+}
+
+.app-sider-menu {
+  border-inline-end: none !important;
+  height: 100%;
+  overflow: auto;
+}
+
+.app-content {
+  margin: 24px;
+  background: var(--app-content-bg, transparent);
+  min-height: calc(100vh - 64px - 48px);
+}
+
+[data-theme="blur"] .app-sider {
+  background: rgba(0, 0, 0, 0.45) !important;
+  border-right-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="blur"] .app-header-brand-title {
+  color: #fff !important;
+}
+
+[data-theme="blur"] .app-header-menu-btn {
+  color: #eee !important;
+}
+
+[data-theme="blur"] .app-header {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+[data-theme="blur"] .app-content .ant-card {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+[data-theme="blur"] .app-content .ant-typography {
+  color: #fff;
+}

@@ -1,0 +1,47 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:///./data/app.db}
+      - SECRET_KEY=dev-secret-change-in-production
+      - DEBUG=true
+    volumes:
+      - ./backend/data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    command: >
+      sh -c "python scripts/seed.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  # 默认不启动。验证/生产切 PG：
+  #   docker compose --profile pg up -d postgres
+  #   并设置 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/industrial_ai
+  postgres:
+    profiles: ["pg"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: industrial_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d industrial_ai"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
