@@ -43,13 +43,14 @@ async def get_current_user(
         raise AuthException("用户不存在或已禁用")
 
     role_result = await session.execute(
-        select(SysRole.code, SysRole.data_scope)
+        select(SysRole.code, SysRole.name, SysRole.data_scope)
         .join(SysUserRole, SysUserRole.role_id == SysRole.id)
         .where(SysUserRole.user_id == user.id, SysRole.is_deleted.is_(False))
     )
     role_rows = list(role_result.all())
     roles = [row[0] for row in role_rows]
-    data_scope = resolve_effective_scope([row[1] for row in role_rows])
+    role_names = [row[1] for row in role_rows]
+    data_scope = resolve_effective_scope([row[2] for row in role_rows])
 
     perm_result = await session.execute(
         select(SysPermission.code)
@@ -60,7 +61,13 @@ async def get_current_user(
     permissions = set(perm_result.scalars().all())
 
     request.state.user_id = user.id
-    return CurrentUser(user=user, roles=roles, permissions=permissions, data_scope=data_scope)
+    return CurrentUser(
+        user=user,
+        roles=roles,
+        role_names=role_names,
+        permissions=permissions,
+        data_scope=data_scope,
+    )
 
 
 def require_permission(code: str) -> Callable:

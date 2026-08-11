@@ -1,13 +1,20 @@
 import { create } from "zustand";
 import type { MenuNode, UserInfo } from "@/types";
 import { fetchMe, fetchMenus, login as apiLogin } from "@/api/auth";
+import {
+  clearTokens,
+  getAccessToken,
+  setRememberedUsername,
+  setTokens,
+} from "@/utils/tokenStorage";
 
 interface AuthState {
   user: UserInfo | null;
   menus: MenuNode[];
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, remember?: boolean) => Promise<void>;
   logout: () => void;
+  setUser: (user: UserInfo) => void;
   bootstrap: () => Promise<void>;
   hasPermission: (code: string) => boolean;
 }
@@ -17,22 +24,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   menus: [],
   loading: false,
 
-  login: async (username, password) => {
+  login: async (username, password, remember = true) => {
     const data = await apiLogin(username, password);
-    localStorage.setItem("access_token", data.access_token);
-    localStorage.setItem("refresh_token", data.refresh_token);
+    setTokens(data.access_token, data.refresh_token, remember);
+    if (remember) {
+      setRememberedUsername(username);
+    } else {
+      setRememberedUsername(null);
+    }
     const menus = await fetchMenus();
     set({ user: data.user, menus });
   },
 
   logout: () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+    clearTokens();
     set({ user: null, menus: [] });
   },
 
+  setUser: (user) => {
+    set({ user });
+  },
+
   bootstrap: async () => {
-    const token = localStorage.getItem("access_token");
+    const token = getAccessToken();
     if (!token) return;
     set({ loading: true });
     try {

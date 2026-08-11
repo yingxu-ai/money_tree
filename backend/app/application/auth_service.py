@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.context import CurrentUser
 from app.auth.data_scope import apply_user_scope, resolve_effective_scope, resolve_scope_filter
 from app.auth.schemas import MenuNode, UserInfo
-from app.core.exceptions import AuthException, NotFoundException
+from app.core.exceptions import AuthException, NotFoundException, ValidationException
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -53,10 +53,54 @@ class AuthService:
         current = await self._build_current_user(user)
         access = create_access_token(str(user.id), {"tenant_id": user.tenant_id})
         refresh = create_refresh_token(str(user.id))
-        return access, refresh, self._to_user_info(current)
+        return access, refresh, await self._to_user_info(current)
 
     async def get_me(self, current: CurrentUser) -> UserInfo:
-        return self._to_user_info(current)
+        return await self._to_user_info(current)
+
+    async def update_profile(self, current: CurrentUser, data) -> UserInfo:
+        user = current.user
+        if data.display_name is not None:
+            user.display_name = data.display_name.strip()
+        if "email" in data.model_fields_set:
+            user.email = data.email
+        if "avatar_url" in data.model_fields_set:
+            self._validate_avatar_url(data.avatar_url)
+            user.avatar_url = data.avatar_url
+        await self.session.flush()
+        refreshed = await self._build_current_user(user)
+        return await self._to_user_info(refreshed)
+
+    async def change_password(self, current: CurrentUser, old_password: str, new_password: str) -> None:
+        user = current.user
+        if not verify_password(old_password, user.password_hash):
+            raise ValidationException("当前密码不正确")
+        if old_password == new_password:
+            raise ValidationException("新密码不能与当前密码相同")
+        user.password_hash = hash_password(new_password)
+        await self.session.flush()
+
+    async def update_avatar_file(self, current: CurrentUser, file_id: int) -> UserInfo:
+        from app.application.file_service import FileService
+
+        file_service = FileService(self.session)
+        record = await file_service.get_file(file_id, current.tenant_id)
+        mime = (record.mime_type or "").lower()
+        if not mime.startswith("image/"):
+            raise ValidationException("头像仅支持图片文件")
+        current.user.avatar_url = f"file:{file_id}"
+        await self.session.flush()
+        refreshed = await self._build_current_user(current.user)
+        return await self._to_user_info(refreshed)
+
+    def _validate_avatar_url(self, avatar_url: str | None) -> None:
+        if avatar_url is None or avatar_url == "":
+            return
+        if avatar_url.startswith("/avatars/") and avatar_url.endswith((".svg", ".png", ".jpg", ".jpeg", ".webp")):
+            return
+        if avatar_url.startswith("file:") and avatar_url[5:].isdigit():
+            return
+        raise ValidationException("头像地址不合法")
 
     async def get_menus(self, current: CurrentUser) -> list[MenuNode]:
         menu_ids_result = await self.session.execute(
@@ -80,13 +124,14 @@ class AuthService:
 
     async def _build_current_user(self, user: SysUser) -> CurrentUser:
         role_result = await self.session.execute(
-            select(SysRole.code, SysRole.data_scope)
+            select(SysRole.code, SysRole.name, SysRole.data_scope)
             .join(SysUserRole, SysUserRole.role_id == SysRole.id)
             .where(SysUserRole.user_id == user.id, SysRole.is_deleted.is_(False))
         )
         role_rows = list(role_result.all())
         roles = [row[0] for row in role_rows]
-        data_scope = resolve_effective_scope([row[1] for row in role_rows])
+        role_names = [row[1] for row in role_rows]
+        data_scope = resolve_effective_scope([row[2] for row in role_rows])
 
         perm_result = await self.session.execute(
             select(SysPermission.code)
@@ -98,6 +143,7 @@ class AuthService:
         return CurrentUser(
             user=user,
             roles=roles,
+            role_names=role_names,
             permissions=permissions,
             data_scope=data_scope,
         )
@@ -140,18 +186,32 @@ class AuthService:
                 )
         return nodes
 
-    def _to_user_info(self, current: CurrentUser) -> UserInfo:
+    async def _dept_name(self, dept_id: int | None) -> str | None:
+        if dept_id is None:
+            return None
+        result = await self.session.execute(
+            select(SysDept.name).where(SysDept.id == dept_id, SysDept.is_deleted.is_(False))
+        )
+        return result.scalar_one_or_none()
+
+    async def _to_user_info(self, current: CurrentUser) -> UserInfo:
         user = current.user
+        dept_name = await self._dept_name(user.dept_id)
         return UserInfo(
             id=user.id,  # type: ignore[arg-type]
             username=user.username,
             display_name=user.display_name,
             email=user.email,
+            avatar_url=getattr(user, "avatar_url", None),
             tenant_id=user.tenant_id,
             dept_id=user.dept_id,
+            dept_name=dept_name,
+            status=user.status,
             data_scope=current.data_scope,
             roles=current.roles,
+            role_names=current.role_names,
             permissions=sorted(current.permissions),
+            created_at=user.created_at.isoformat() if user.created_at else None,
         )
 
 
@@ -313,6 +373,7 @@ class UserService:
             "username": user.username,
             "display_name": user.display_name,
             "email": user.email,
+            "avatar_url": getattr(user, "avatar_url", None),
             "status": user.status,
             "dept_id": user.dept_id,
             "dept_name": dept_name,

@@ -109,7 +109,7 @@ BRANDING_CONFIGS = [
     ("app.subtitle", settings.app_subtitle, "系统副标题"),
     ("app.sidebar_title", settings.app_sidebar_title, "侧栏品牌名"),
     ("app.logo_url", settings.app_logo_url, "Logo 地址"),
-    ("app.theme", settings.app_theme, "主题预设：mint | blur | industrial"),
+    ("app.theme", settings.app_theme, "主题预设：light | dark（Gentelella）"),
 ]
 
 

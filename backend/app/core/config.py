@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     app_subtitle: str = "通用技术底座 · Base Template"
     app_sidebar_title: str = "工业 AI 基座"
     app_logo_url: str = ""
-    app_theme: str = "mint"
+    app_theme: str = "light"
 
     database_url: str = "sqlite+aiosqlite:///./data/app.db"
 

@@ -7,10 +7,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import NotFoundException, ValidationException
 from app.models.infra import SysFile
 
 settings = get_settings()
+
+# 图片上传通用限制（头像 / 封面等可复用）
+IMAGE_MIME_PREFIX = "image/"
+DEFAULT_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 
 
 class FileService:
@@ -35,9 +39,22 @@ class FileService:
         return [self._serialize(f) for f in result.scalars().all()], total or 0
 
     async def upload(
-        self, file: UploadFile, *, tenant_id: int, user_id: int
+        self,
+        file: UploadFile,
+        *,
+        tenant_id: int,
+        user_id: int,
+        image_only: bool = False,
+        max_bytes: int | None = None,
     ) -> dict:
         content = await file.read()
+        mime = file.content_type or "application/octet-stream"
+        if image_only and not mime.lower().startswith(IMAGE_MIME_PREFIX):
+            raise ValidationException("仅支持上传图片")
+        limit = max_bytes if max_bytes is not None else (DEFAULT_IMAGE_MAX_BYTES if image_only else None)
+        if limit is not None and len(content) > limit:
+            raise ValidationException(f"文件大小不能超过 {limit // (1024 * 1024)}MB")
+
         digest = hashlib.sha256(content).hexdigest()
         ext = Path(file.filename or "file").suffix
         object_key = f"{tenant_id}/{uuid.uuid4().hex}{ext}"
@@ -48,7 +65,7 @@ class FileService:
         record = SysFile(
             original_name=file.filename or "unnamed",
             object_key=object_key.replace("\\", "/"),
-            mime_type=file.content_type or "application/octet-stream",
+            mime_type=mime,
             size=len(content),
             sha256=digest,
             status="active",
@@ -94,4 +111,7 @@ class FileService:
             "tenant_id": record.tenant_id,
             "created_by": record.created_by,
             "created_at": record.created_at.isoformat(),
+            # 通用内容访问地址（需登录，供预览/头像等复用）
+            "content_url": f"/api/v1/files/{record.id}/content",
+            "ref": f"file:{record.id}",
         }

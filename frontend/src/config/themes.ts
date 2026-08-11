@@ -1,7 +1,7 @@
-import type { ThemeConfig } from "antd";
+import { theme as antdTheme, type ThemeConfig } from "antd";
 
-/** 配色参考 blur-admin (MIT): mint / blur 两套官方主题 */
-export type ThemeName = "mint" | "blur" | "industrial";
+/** 配色参考 Gentelella (MIT): light / dark 两套官方主题 */
+export type ThemeName = "light" | "dark";
 
 export interface ThemeLayout {
   bodyBg: string;
@@ -10,6 +10,7 @@ export interface ThemeLayout {
   headerBg: string;
   headerText: string;
   contentBg: string;
+  borderColor: string;
   loginBackground: string;
   loginCardBg: string;
   loginCardBlur: boolean;
@@ -24,104 +25,92 @@ export interface AppThemePreset {
   layout: ThemeLayout;
 }
 
-const BLUR_ADMIN_PRIMARY = "#209e91";
-const BLUR_ADMIN_INFO = "#2dacd1";
-const BLUR_ADMIN_SUCCESS = "#90b900";
-const BLUR_ADMIN_WARNING = "#dfb81c";
-const BLUR_ADMIN_DANGER = "#e85656";
+/** Gentelella v4 tokens — DNA: Dark sidebar · Teal #1ABB9C */
+const GT_PRIMARY = "#1ABB9C";
+const GT_PRIMARY_DK = "#169f85";
+const GT_INFO = "#066fd1";
+const GT_SUCCESS = "#2fb344";
+const GT_WARNING = "#f59f00";
+const GT_DANGER = "#d63939";
+const GT_SIDEBAR = "#1a2332";
+
+const LEGACY_THEME_MAP: Record<string, ThemeName> = {
+  mint: "light",
+  industrial: "light",
+  light: "light",
+  blur: "dark",
+  dark: "dark",
+};
 
 export const THEME_PRESETS: Record<ThemeName, AppThemePreset> = {
-  mint: {
-    name: "mint",
-    label: "Mint",
+  light: {
+    name: "light",
+    label: "浅色",
     antd: {
       token: {
-        colorPrimary: BLUR_ADMIN_PRIMARY,
-        colorInfo: BLUR_ADMIN_INFO,
-        colorSuccess: BLUR_ADMIN_SUCCESS,
-        colorWarning: BLUR_ADMIN_WARNING,
-        colorError: BLUR_ADMIN_DANGER,
-        colorBgLayout: "#F0F3F4",
+        colorPrimary: GT_PRIMARY,
+        colorInfo: GT_INFO,
+        colorSuccess: GT_SUCCESS,
+        colorWarning: GT_WARNING,
+        colorError: GT_DANGER,
+        colorLink: GT_PRIMARY,
+        colorBgLayout: "#f5f7fb",
         colorBgContainer: "#ffffff",
-        colorText: "#666666",
-        colorTextSecondary: "#949494",
-        borderRadius: 4,
-      },
-    },
-    layout: {
-      bodyBg: "#F0F3F4",
-      siderBg: "#1C2B36",
-      siderText: "#ffffff",
-      headerBg: "#ffffff",
-      headerText: "#666666",
-      contentBg: "#F0F3F4",
-      loginBackground: "linear-gradient(135deg, #1C2B36 0%, #209e91 100%)",
-      loginCardBg: "#ffffff",
-      loginCardBlur: false,
-      loginTitleColor: "#1C2B36",
-      loginSubtitleColor: "#949494",
-    },
-  },
-  blur: {
-    name: "blur",
-    label: "Blur",
-    antd: {
-      token: {
-        colorPrimary: BLUR_ADMIN_PRIMARY,
-        colorInfo: BLUR_ADMIN_INFO,
-        colorSuccess: BLUR_ADMIN_SUCCESS,
-        colorWarning: BLUR_ADMIN_WARNING,
-        colorError: BLUR_ADMIN_DANGER,
-        colorBgLayout: "#2a2a35",
-        colorBgContainer: "rgba(255,255,255,0.92)",
-        colorText: "#ffffff",
-        colorTextSecondary: "#eeeeee",
-        borderRadius: 4,
-      },
-      algorithm: undefined,
-    },
-    layout: {
-      bodyBg: "#2a2a35",
-      siderBg: "rgba(0, 0, 0, 0.5)",
-      siderText: "#ffffff",
-      headerBg: "rgba(0, 0, 0, 0.35)",
-      headerText: "#ffffff",
-      contentBg: "transparent",
-      loginBackground:
-        "linear-gradient(135deg, rgba(32,158,145,0.35) 0%, rgba(28,43,54,0.95) 50%, rgba(0,0,0,0.85) 100%)",
-      loginCardBg: "rgba(0, 0, 0, 0.55)",
-      loginCardBlur: true,
-      loginTitleColor: "#ffffff",
-      loginSubtitleColor: "#eeeeee",
-    },
-  },
-  industrial: {
-    name: "industrial",
-    label: "Industrial",
-    antd: {
-      token: {
-        colorPrimary: "#2d5a8e",
-        colorInfo: "#2dacd1",
-        colorSuccess: "#52c41a",
-        colorWarning: "#faad14",
-        colorError: "#ff4d4f",
-        colorBgLayout: "#f5f7fa",
-        colorBgContainer: "#ffffff",
+        colorText: "#1e2633",
+        colorTextSecondary: "#626d7d",
+        colorBorder: "#e6e7eb",
         borderRadius: 6,
       },
     },
     layout: {
-      bodyBg: "#f5f7fa",
-      siderBg: "#1a2a4a",
-      siderText: "#ffffff",
+      bodyBg: "#f5f7fb",
+      siderBg: "#ffffff",
+      siderText: "#626d7d",
       headerBg: "#ffffff",
-      headerText: "#333333",
-      contentBg: "#f5f7fa",
-      loginBackground: "linear-gradient(135deg, #1a2a4a 0%, #2d5a8e 100%)",
+      headerText: "#1e2633",
+      contentBg: "#f5f7fb",
+      borderColor: "#e6e7eb",
+      loginBackground: `linear-gradient(135deg, ${GT_SIDEBAR} 0%, ${GT_PRIMARY_DK} 100%)`,
       loginCardBg: "#ffffff",
       loginCardBlur: false,
-      loginTitleColor: "#1a2a4a",
-      loginSubtitleColor: "#666666",
+      loginTitleColor: GT_SIDEBAR,
+      loginSubtitleColor: "#7e8896",
+    },
+  },
+  dark: {
+    name: "dark",
+    label: "深色",
+    antd: {
+      algorithm: antdTheme.darkAlgorithm,
+      token: {
+        colorPrimary: GT_PRIMARY,
+        colorInfo: GT_INFO,
+        colorSuccess: GT_SUCCESS,
+        colorWarning: GT_WARNING,
+        colorError: GT_DANGER,
+        colorLink: GT_PRIMARY,
+        colorBgLayout: "#0f1623",
+        colorBgContainer: "#1a2332",
+        colorBgElevated: "#141d2b",
+        colorText: "#e6ebf2",
+        colorTextSecondary: "#b3bccb",
+        colorBorder: "rgba(255,255,255,0.08)",
+        borderRadius: 6,
+      },
+    },
+    layout: {
+      bodyBg: "#0f1623",
+      siderBg: GT_SIDEBAR,
+      siderText: "#7b8fa3",
+      headerBg: "rgba(20,29,43,0.95)",
+      headerText: "#e6ebf2",
+      contentBg: "#0f1623",
+      borderColor: "rgba(255,255,255,0.08)",
+      loginBackground: `linear-gradient(160deg, #0f1623 0%, ${GT_SIDEBAR} 45%, rgba(26,187,156,0.25) 100%)`,
+      loginCardBg: "#1a2332",
+      loginCardBlur: false,
+      loginTitleColor: "#e6ebf2",
+      loginSubtitleColor: "#8a93a3",
     },
   },
 };
@@ -132,8 +121,8 @@ export const THEME_OPTIONS = Object.values(THEME_PRESETS).map((t) => ({
 }));
 
 export function resolveThemeName(name?: string): ThemeName {
-  if (name && name in THEME_PRESETS) return name as ThemeName;
-  return "mint";
+  if (!name) return "light";
+  return LEGACY_THEME_MAP[name] ?? "light";
 }
 
 export function getThemePreset(name?: string): AppThemePreset {
@@ -149,6 +138,7 @@ export function applyThemeCssVars(theme: AppThemePreset) {
   root.style.setProperty("--app-header-bg", layout.headerBg);
   root.style.setProperty("--app-header-text", layout.headerText);
   root.style.setProperty("--app-content-bg", layout.contentBg);
+  root.style.setProperty("--app-border-color", layout.borderColor);
   root.style.setProperty("--app-login-bg", layout.loginBackground);
   root.style.setProperty("--app-login-card-bg", layout.loginCardBg);
   root.style.setProperty("--app-login-title-color", layout.loginTitleColor);

@@ -1,6 +1,6 @@
 import { UploadOutlined } from "@ant-design/icons";
 import { Button, Upload, type ButtonProps, type UploadProps } from "antd";
-import { uploadFile } from "@/api/files";
+import { uploadFile, type FileItem } from "@/api/files";
 import { notifyError, notifySuccess } from "@/components/kit/feedback";
 import { Permission } from "@/permissions";
 
@@ -10,7 +10,8 @@ export interface FileUploadButtonProps {
   children?: React.ReactNode;
   accept?: string;
   multiple?: boolean;
-  onUploaded?: () => void | Promise<void>;
+  /** 上传成功回调；可拿到文件元数据（含 ref / content_url） */
+  onUploaded?: (file?: FileItem) => void | Promise<void>;
 }
 
 export default function FileUploadButton({
@@ -23,10 +24,10 @@ export default function FileUploadButton({
 }: FileUploadButtonProps) {
   const customRequest: UploadProps["customRequest"] = async ({ file, onSuccess, onError }) => {
     try {
-      await uploadFile(file as File);
+      const uploaded = await uploadFile(file as File);
       notifySuccess("上传成功");
-      onSuccess?.({});
-      await onUploaded?.();
+      onSuccess?.(uploaded);
+      await onUploaded?.(uploaded);
     } catch (err) {
       notifyError(err, "上传失败");
       onError?.(err as Error);

@@ -8,6 +8,7 @@ from app.models.system import SysUser
 class CurrentUser:
     user: SysUser
     roles: list[str] = field(default_factory=list)
+    role_names: list[str] = field(default_factory=list)
     permissions: set[str] = field(default_factory=set)
     # 多角色取最宽后的有效数据范围
     data_scope: str = DataScope.ALL.value

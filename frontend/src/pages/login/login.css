@@ -1,0 +1,248 @@
+.login-gate {
+  position: relative;
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  color: #fff;
+  font-family: "Microsoft YaHei", Arial, sans-serif;
+  background: radial-gradient(circle at center, #123047, #02070c 70%);
+}
+
+.login-gate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 95%, rgba(0, 200, 255, 0.08));
+  background-size: 100% 6px;
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.login-gate-theme {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+}
+
+.login-gate-header {
+  position: absolute;
+  top: 70px;
+  width: 100%;
+  text-align: center;
+  z-index: 2;
+}
+
+.login-gate-header h1 {
+  margin: 0;
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: 12px;
+  color: #fff;
+}
+
+.login-gate-header p {
+  margin: 15px 0 0;
+  color: #6da5c5;
+  font-size: 18px;
+  letter-spacing: 8px;
+}
+
+.login-gate-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 520px;
+  height: 620px;
+  perspective: 1200px;
+  z-index: 1;
+}
+
+.login-gate-door {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+.login-gate-panel {
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(135deg, #0b1e2c, #17394d, #06131d);
+  border: 2px solid #2b718f;
+  box-shadow: 0 0 40px rgba(0, 180, 255, 0.25);
+}
+
+.login-gate-panel.is-left {
+  transform-origin: left;
+  transform: rotateY(-100deg);
+}
+
+.login-gate-panel.is-right {
+  transform-origin: right;
+  transform: rotateY(100deg);
+}
+
+.login-gate-form {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 340px;
+  z-index: 1;
+}
+
+.login-gate-form h2 {
+  margin: 0 0 35px;
+  text-align: center;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  color: #fff;
+}
+
+.login-gate-form input[type="text"],
+.login-gate-form input[type="password"] {
+  width: 100%;
+  height: 48px;
+  margin-bottom: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #28617d;
+  color: #fff;
+  padding: 0 15px;
+  font-size: 16px;
+  outline: none;
+}
+
+.login-gate-form input::placeholder {
+  color: rgba(109, 165, 197, 0.7);
+}
+
+.login-gate-form input:focus {
+  border-color: #00d8ff;
+}
+
+.login-gate-password {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.login-gate-password input {
+  margin-bottom: 0;
+  padding-right: 48px;
+}
+
+.login-gate-eye {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #6da5c5;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.login-gate-eye:hover {
+  color: #00d8ff;
+}
+
+.login-gate-remember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  color: #6da5c5;
+  font-size: 14px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.login-gate-remember input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #00d8ff;
+  cursor: pointer;
+}
+
+.login-gate-submit {
+  width: 100%;
+  height: 50px;
+  border: none;
+  background: linear-gradient(90deg, #0078ff, #00d8ff);
+  color: #fff;
+  font-size: 18px;
+  letter-spacing: 4px;
+  cursor: pointer;
+}
+
+.login-gate-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.login-gate-error {
+  margin: -8px 0 16px;
+  color: #ff6b6b;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-align: center;
+  min-height: 18px;
+}
+
+.login-gate-footer {
+  position: absolute;
+  bottom: 60px;
+  width: 100%;
+  text-align: center;
+  color: #6b91a8;
+  letter-spacing: 4px;
+  z-index: 2;
+}
+
+.login-gate-status {
+  position: absolute;
+  bottom: 25px;
+  width: 100%;
+  text-align: center;
+  color: #00d8ff;
+  font-size: 14px;
+  z-index: 2;
+}
+
+@media (max-width: 640px) {
+  .login-gate-header h1 {
+    font-size: 28px;
+    letter-spacing: 6px;
+  }
+
+  .login-gate-header p {
+    font-size: 14px;
+    letter-spacing: 4px;
+  }
+
+  .login-gate-core {
+    width: 100%;
+    height: auto;
+    min-height: 420px;
+  }
+
+  .login-gate-form {
+    width: min(340px, calc(100% - 32px));
+  }
+
+  .login-gate-panel {
+    display: none;
+  }
+}

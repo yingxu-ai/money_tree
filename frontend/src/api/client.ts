@@ -2,6 +2,7 @@ import axios from "axios";
 import type { ApiResponse } from "@/types";
 import { ApiError } from "@/api/errors";
 import { ErrorCode } from "@/config/errorCodes";
+import { clearTokens, getAccessToken } from "@/utils/tokenStorage";
 
 const http = axios.create({
   baseURL: "/api/v1",
@@ -9,7 +10,7 @@ const http = axios.create({
 });
 
 http.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
+  const token = getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -32,8 +33,7 @@ http.interceptors.response.use(
       if (typeof body?.code === "number") {
         const apiError = ApiError.fromResponse(body.code, body.message, body.trace_id);
         if (apiError.isAuthError) {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
+          clearTokens();
           if (!window.location.pathname.startsWith("/login")) {
             window.location.href = "/login";
           }

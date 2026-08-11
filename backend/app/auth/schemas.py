@@ -17,11 +17,27 @@ class UserInfo(BaseModel):
     username: str
     display_name: str
     email: str | None
+    avatar_url: str | None = None
     tenant_id: int
     dept_id: int | None = None
+    dept_name: str | None = None
+    status: str = "active"
     data_scope: str = "ALL"
     roles: list[str]
+    role_names: list[str] = Field(default_factory=list)
     permissions: list[str]
+    created_at: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+class ProfileUpdateRequest(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=128)
+    email: str | None = None
+    avatar_url: str | None = None
 
 
 class MenuNode(BaseModel):
@@ -60,6 +76,7 @@ class UserOut(BaseModel):
     username: str
     display_name: str
     email: str | None
+    avatar_url: str | None = None
     status: str
     dept_id: int | None = None
     dept_name: str | None = None

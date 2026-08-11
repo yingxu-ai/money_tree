@@ -17,11 +17,16 @@ export interface UserInfo {
   username: string;
   display_name: string;
   email: string | null;
+  avatar_url?: string | null;
   tenant_id: number;
   dept_id?: number | null;
+  dept_name?: string | null;
+  status?: string;
   data_scope?: string;
   roles: string[];
+  role_names?: string[];
   permissions: string[];
+  created_at?: string | null;
 }
 
 export interface MenuNode {

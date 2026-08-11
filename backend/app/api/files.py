@@ -55,6 +55,24 @@ async def download_file(
     )
 
 
+@router.get("/{file_id}/content")
+async def file_content(
+    file_id: int,
+    session: AsyncSession = Depends(get_session),
+    current=Depends(get_current_user),
+):
+    """登录用户可读本租户文件内容（图片预览 / 头像等通用场景，不要求 file:view）。"""
+    service = FileService(session)
+    record = await service.get_file(file_id, current.tenant_id)
+    path = await service.resolve_path(record)
+    return FileResponse(
+        path,
+        media_type=record.mime_type,
+        filename=record.original_name,
+        content_disposition_type="inline",
+    )
+
+
 @router.delete("/{file_id}", dependencies=[Depends(require_permission("file:delete"))])
 async def delete_file(
     file_id: int,

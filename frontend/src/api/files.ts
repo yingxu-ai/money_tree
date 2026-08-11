@@ -1,5 +1,6 @@
 import { deleteData, getData } from "./client";
 import type { PageResult } from "@/types";
+import { getAccessToken } from "@/utils/tokenStorage";
 
 export interface FileItem {
   id: number;
@@ -10,6 +11,8 @@ export interface FileItem {
   sha256: string | null;
   status: string;
   created_at: string;
+  content_url?: string;
+  ref?: string;
 }
 
 export interface OperationLogItem {
@@ -38,7 +41,7 @@ export const fetchFiles = (page = 1, pageSize = 20, keyword?: string) =>
 export async function uploadFile(file: File) {
   const form = new FormData();
   form.append("file", file);
-  const token = localStorage.getItem("access_token");
+  const token = getAccessToken();
   const res = await fetch("/api/v1/files", {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -50,7 +53,7 @@ export async function uploadFile(file: File) {
 }
 
 export async function downloadFile(id: number, filename: string) {
-  const token = localStorage.getItem("access_token");
+  const token = getAccessToken();
   const res = await fetch(`/api/v1/files/${id}/download`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });

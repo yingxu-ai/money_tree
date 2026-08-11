@@ -37,6 +37,8 @@ async def _ensure_sqlite_columns(conn) -> None:
     columns = {row[1] for row in result.fetchall()}
     if columns and "dept_id" not in columns:
         await conn.execute(text("ALTER TABLE sys_user ADD COLUMN dept_id INTEGER"))
+    if columns and "avatar_url" not in columns:
+        await conn.execute(text("ALTER TABLE sys_user ADD COLUMN avatar_url VARCHAR(255)"))
 
 
 async def init_db() -> None:

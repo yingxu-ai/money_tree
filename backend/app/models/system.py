@@ -62,6 +62,8 @@ class SysUser(SQLModel, table=True):
     password_hash: str = Field(max_length=255)
     display_name: str = Field(default="", max_length=128)
     email: str | None = Field(default=None, max_length=128)
+    # 内置: /avatars/01.svg ；上传: file:{sys_file.id}
+    avatar_url: str | None = Field(default=None, max_length=255)
     status: str = Field(default=UserStatus.ACTIVE.value, max_length=32)
     dept_id: int | None = Field(default=None, foreign_key="sys_dept.id", index=True)
     tenant_id: int = Field(default=1, index=True)
