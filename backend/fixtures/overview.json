@@ -1,0 +1,89 @@
+{
+  "title": "总览范本",
+  "subtitle": "KPI + 图表栅格 + 滚动动态；复制本页改 JSON 即可搭 Demo",
+  "kpis": [
+    { "title": "今日产量", "value": 1280, "unit": "吨", "delta": "+3.2%" },
+    { "title": "稼动率", "value": 86.5, "unit": "%", "delta": "+1.1%" },
+    { "title": "在制工单", "value": 42, "unit": "单", "delta": "-2" },
+    { "title": "今日告警", "value": 5, "unit": "条", "delta": "+1" }
+  ],
+  "charts": [
+    {
+      "id": "output_trend",
+      "title": "产量趋势",
+      "type": "line",
+      "unit": "吨",
+      "span": 12,
+      "points": [
+        { "label": "08:00", "value": 110 },
+        { "label": "10:00", "value": 150 },
+        { "label": "12:00", "value": 132 },
+        { "label": "14:00", "value": 168 },
+        { "label": "16:00", "value": 190 },
+        { "label": "18:00", "value": 175 }
+      ]
+    },
+    {
+      "id": "oee_trend",
+      "title": "稼动率趋势",
+      "type": "line",
+      "unit": "%",
+      "span": 12,
+      "points": [
+        { "label": "周一", "value": 82 },
+        { "label": "周二", "value": 85 },
+        { "label": "周三", "value": 88 },
+        { "label": "周四", "value": 84 },
+        { "label": "周五", "value": 90 },
+        { "label": "周六", "value": 86 }
+      ]
+    },
+    {
+      "id": "line_output",
+      "title": "各产线产量",
+      "type": "bar",
+      "unit": "吨",
+      "span": 8,
+      "points": [
+        { "label": "一线", "value": 320 },
+        { "label": "二线", "value": 280 },
+        { "label": "三线", "value": 260 },
+        { "label": "四线", "value": 210 }
+      ]
+    },
+    {
+      "id": "energy",
+      "title": "能耗对比",
+      "type": "bar",
+      "unit": "kWh",
+      "span": 8,
+      "points": [
+        { "label": "一车间", "value": 1200 },
+        { "label": "二车间", "value": 980 },
+        { "label": "三车间", "value": 860 }
+      ]
+    },
+    {
+      "id": "alarm_share",
+      "title": "告警分布",
+      "type": "pie",
+      "span": 8,
+      "points": [
+        { "label": "设备", "value": 12 },
+        { "label": "质量", "value": 7 },
+        { "label": "能耗", "value": 4 },
+        { "label": "其他", "value": 3 }
+      ]
+    }
+  ],
+  "feed": [
+    { "time": "18:21:03", "level": "info", "text": "一车间产线 A 产量达标" },
+    { "time": "18:18:41", "level": "warn", "text": "二车间温度偏高，已通知巡检" },
+    { "time": "18:12:09", "level": "info", "text": "工单 WO-3921 已完工入库" },
+    { "time": "18:05:55", "level": "error", "text": "三线包装机通信中断 12s 后恢复" },
+    { "time": "17:58:20", "level": "info", "text": "能耗峰值回落至正常区间" },
+    { "time": "17:50:02", "level": "warn", "text": "原料库存低于安全线（SKU-882）" },
+    { "time": "17:42:17", "level": "info", "text": "质量抽检批次 Q-118 合格" },
+    { "time": "17:35:44", "level": "info", "text": "排程已同步至 MES" }
+  ]
+}

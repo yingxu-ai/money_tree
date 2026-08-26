@@ -15,6 +15,8 @@ import AuditPage from "@/pages/system/AuditPage";
 import DeptsPage from "@/pages/system/DeptsPage";
 import DictsPage from "@/pages/system/DictsPage";
 import AssistantPage from "@/pages/ai-assistant/AssistantPage";
+import OverviewTemplatePage from "@/pages/demo/OverviewTemplatePage";
+import QueryTableTemplatePage from "@/pages/demo/QueryTableTemplatePage";
 
 function Bootstrap() {
   const bootstrapAuth = useAuthStore((s) => s.bootstrap);
@@ -47,6 +49,8 @@ export default function App() {
           <Route path="/configs" element={<ConfigsPage />} />
           <Route path="/files" element={<FilesPage />} />
           <Route path="/ai-assistant" element={<AssistantPage />} />
+          <Route path="/demo/overview" element={<OverviewTemplatePage />} />
+          <Route path="/demo/query-table" element={<QueryTableTemplatePage />} />
           <Route path="*" element={<Navigate to="/dashboards" replace />} />
         </Route>
       </Routes>

@@ -1,15 +1,18 @@
 import {
   ApartmentOutlined,
+  AppstoreOutlined,
   BookOutlined,
   ControlOutlined,
   DashboardOutlined,
   FileSearchOutlined,
   FolderOutlined,
+  FundOutlined,
   MenuFoldOutlined,
   MenuOutlined,
   MenuUnfoldOutlined,
   RobotOutlined,
   SettingOutlined,
+  TableOutlined,
   TeamOutlined,
   UserOutlined,
 } from "@ant-design/icons";
@@ -40,6 +43,9 @@ const iconMap: Record<string, React.ReactNode> = {
   FileSearchOutlined: <FileSearchOutlined />,
   ApartmentOutlined: <ApartmentOutlined />,
   BookOutlined: <BookOutlined />,
+  AppstoreOutlined: <AppstoreOutlined />,
+  FundOutlined: <FundOutlined />,
+  TableOutlined: <TableOutlined />,
 };
 
 function toMenuItems(nodes: MenuNode[]): Array<{

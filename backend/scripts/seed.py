@@ -77,6 +77,10 @@ MENUS = [
     (9, 1, "审计日志", "/system/audit", "system/Audit", "MENU", 4, "FileSearchOutlined"),
     (10, 1, "部门管理", "/system/depts", "system/Depts", "MENU", 5, "ApartmentOutlined"),
     (11, 1, "字典管理", "/system/dicts", "system/Dicts", "MENU", 6, "BookOutlined"),
+    # Demo 范本（复制用，非业务）
+    (12, None, "Demo 范本", None, None, "CATALOG", 50, "AppstoreOutlined"),
+    (13, 12, "总览范本", "/demo/overview", "demo/OverviewTemplate", "MENU", 1, "FundOutlined"),
+    (14, 12, "查询表范本", "/demo/query-table", "demo/QueryTableTemplate", "MENU", 2, "TableOutlined"),
 ]
 
 # 示例部门树（固定 id，便于挂用户）

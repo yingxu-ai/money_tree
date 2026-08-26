@@ -1,0 +1,39 @@
+.scroll-feed {
+  overflow: hidden;
+  position: relative;
+}
+
+.scroll-feed-track.is-rolling {
+  animation: scroll-feed-up 28s linear infinite;
+}
+
+.scroll-feed-track.is-rolling:hover {
+  animation-play-state: paused;
+}
+
+.scroll-feed-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.scroll-feed-time {
+  flex: 0 0 72px;
+  font-variant-numeric: tabular-nums;
+}
+
+.scroll-feed-text {
+  flex: 1;
+  min-width: 0;
+}
+
+@keyframes scroll-feed-up {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "title": "查询表范本",
+  "subtitle": "SearchBar + DataTable；复制本页改列定义与 JSON 即可搭台账类 Demo",
+  "keyword_placeholder": "设备编号 / 名称",
+  "items": [
+    {
+      "id": 1,
+      "code": "EQ-1001",
+      "name": "注塑机 A1",
+      "dept": "一车间",
+      "status": "running",
+      "owner": "张三",
+      "updated_at": "2026-08-26 17:40:00"
+    },
+    {
+      "id": 2,
+      "code": "EQ-1002",
+      "name": "注塑机 A2",
+      "dept": "一车间",
+      "status": "idle",
+      "owner": "李四",
+      "updated_at": "2026-08-26 16:12:00"
+    },
+    {
+      "id": 3,
+      "code": "EQ-2001",
+      "name": "包装线 B1",
+      "dept": "二车间",
+      "status": "alarm",
+      "owner": "王五",
+      "updated_at": "2026-08-26 18:05:00"
+    },
+    {
+      "id": 4,
+      "code": "EQ-2002",
+      "name": "包装线 B2",
+      "dept": "二车间",
+      "status": "running",
+      "owner": "赵六",
+      "updated_at": "2026-08-26 15:30:00"
+    },
+    {
+      "id": 5,
+      "code": "EQ-3001",
+      "name": "空压站 C1",
+      "dept": "动力站",
+      "status": "maintenance",
+      "owner": "钱七",
+      "updated_at": "2026-08-25 09:20:00"
+    },
+    {
+      "id": 6,
+      "code": "EQ-3002",
+      "name": "冷却塔 C2",
+      "dept": "动力站",
+      "status": "running",
+      "owner": "孙八",
+      "updated_at": "2026-08-26 11:08:00"
+    }
+  ]
+}
