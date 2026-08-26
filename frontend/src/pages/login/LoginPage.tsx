@@ -12,10 +12,16 @@ import {
 } from "@/utils/tokenStorage";
 import "./login.css";
 
+/** 与后端 seed / DEFAULT_ADMIN_* 保持一致，便于本地开箱试用 */
+const DEFAULT_USERNAME = "admin";
+const DEFAULT_PASSWORD = "admin123";
+
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
-  const [username, setUsername] = useState(getRememberedUsername);
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(
+    () => getRememberedUsername() || DEFAULT_USERNAME,
+  );
+  const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(isRememberLogin);
   const [error, setError] = useState("");
@@ -119,6 +125,10 @@ export default function LoginPage() {
             <button type="submit" className="login-gate-submit" disabled={loading}>
               {loading ? "启动中..." : "启动"}
             </button>
+
+            <p className="login-gate-hint">
+              默认账号 {DEFAULT_USERNAME} / {DEFAULT_PASSWORD}
+            </p>
           </form>
         </div>
       </div>

@@ -201,6 +201,15 @@
   min-height: 18px;
 }
 
+.login-gate-hint {
+  margin: 16px 0 0;
+  text-align: center;
+  color: #6da5c5;
+  font-size: 13px;
+  letter-spacing: 1px;
+  opacity: 0.85;
+}
+
 .login-gate-footer {
   position: absolute;
   bottom: 60px;

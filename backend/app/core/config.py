@@ -1,12 +1,35 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# backend/ 根目录（与 cwd 无关，避免 seed / uvicorn 写到不同 sqlite 文件）
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_sqlite_url(url: str) -> str:
+    """将相对 sqlite 路径锚定到 backend 根目录。"""
+    if not url.startswith("sqlite"):
+        return url
+    marker = ":///"
+    if marker not in url:
+        return url
+    prefix, _, path = url.partition(marker)
+    if not path:
+        return url
+    # 已是绝对路径：Unix `/...` 或 Windows `C:/...`
+    if path.startswith("/") or (len(path) >= 2 and path[1] == ":"):
+        return url
+    rel = path[2:] if path.startswith("./") else path
+    abs_path = (_BACKEND_ROOT / rel).resolve()
+    return f"{prefix}{marker}{abs_path.as_posix()}"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_BACKEND_ROOT / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -27,6 +50,11 @@ class Settings(BaseSettings):
     app_theme: str = "light"
 
     database_url: str = "sqlite+aiosqlite:///./data/app.db"
+
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def _anchor_sqlite_path(cls, value: str) -> str:
+        return _resolve_sqlite_url(value)
 
     secret_key: str = "change-me-in-production-use-env-var"
     access_token_expire_minutes: int = 60
