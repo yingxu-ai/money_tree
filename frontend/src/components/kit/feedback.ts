@@ -12,6 +12,8 @@ export function notifySuccess(msg = "操作成功"): void {
 }
 
 export function notifyError(err: unknown, fallback = "操作失败"): void {
+  // 令牌失效：拦截器已跳登录，避免多请求连环弹窗
+  if (err instanceof ApiError && err.isAuthError) return;
   message.error(getErrorMessage(err, fallback));
 }
 

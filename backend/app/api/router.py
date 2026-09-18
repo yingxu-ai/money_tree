@@ -1,6 +1,18 @@
 from fastapi import APIRouter
 
-from app.api import audit, auth, config, dashboard, demo, files, metrics, public, runtime, system
+from app.api import (
+    audit,
+    auth,
+    config,
+    dashboard,
+    demo,
+    equipment_analysis,
+    files,
+    metrics,
+    public,
+    runtime,
+    system,
+)
 
 api_router = APIRouter()
 api_router.include_router(public.router)
@@ -18,3 +30,4 @@ api_router.include_router(config.router)
 api_router.include_router(runtime.router)
 api_router.include_router(audit.router)
 api_router.include_router(demo.router)
+api_router.include_router(equipment_analysis.router)

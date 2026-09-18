@@ -81,6 +81,41 @@ MENUS = [
     (12, None, "Demo 范本", None, None, "CATALOG", 50, "AppstoreOutlined"),
     (13, 12, "总览范本", "/demo/overview", "demo/OverviewTemplate", "MENU", 1, "FundOutlined"),
     (14, 12, "查询表范本", "/demo/query-table", "demo/QueryTableTemplate", "MENU", 2, "TableOutlined"),
+    # 设备分析（本分支主业务；钻取页 /devices/:id 不进侧栏）
+    (15, None, "设备分析", None, None, "CATALOG", 5, "ClusterOutlined"),
+    (16, 15, "采集配置", "/devices/collect", "equipment-analysis/CollectConfig", "MENU", 1, "ApiOutlined"),
+    (17, 15, "设备列表", "/devices", "equipment-analysis/DeviceList", "MENU", 2, "UnorderedListOutlined"),
+    (18, 15, "分析诊断", "/analysis/diagnosis", "equipment-analysis/AnalysisDiagnosis", "MENU", 3, "ExperimentOutlined"),
+]
+
+# equipment-ops 分支曾占用的菜单 id（与本分支 15～20 冲突）；seed 时软删除，避免挂在「运行调优」下
+# 19/20：原「全局风险」「运行调优」已并入「分析诊断」
+RETIRED_MENU_IDS = [
+    12,
+    13,
+    14,  # Demo 范本（本分支不展示）
+    19,
+    20,  # 原全局风险 / 运行调优 → 分析诊断
+    21,
+    22,
+    23,
+    24,
+    26,  # 原设备管理子菜单（parent 曾为 20）
+    30,
+    31,
+    32,
+    33,
+    34,  # 实时监控
+    40,
+    41,
+    42,
+    43,
+    44,  # AI 分析（ops）
+    50,
+    51,
+    52,
+    53,
+    54,  # 设备运营
 ]
 
 # 示例部门树（固定 id，便于挂用户）
@@ -89,8 +124,16 @@ DEPTS = [
     (1, None, "总部", "HQ", 1),
     (2, 1, "生产部", "PROD", 1),
     (3, 1, "技术部", "TECH", 2),
+    (11, 1, "质量部", "QA", 3),
     (4, 2, "一车间", "PROD-1", 1),
     (5, 2, "二车间", "PROD-2", 2),
+    (6, 2, "动力部", "POWER", 3),
+    (7, 2, "三车间", "PROD-3", 4),
+    (8, 2, "仓储物流部", "WH", 5),
+    (9, 3, "实验室", "LAB", 1),
+    (10, 3, "设备工程部", "ENG", 2),
+    (12, 11, "质检中心", "QC", 1),
+    (13, 11, "计量站", "MET", 2),
 ]
 
 DICT_TYPES = [
@@ -451,6 +494,15 @@ async def _sync_menus_and_permissions(session) -> None:
             ).scalar_one_or_none()
             if linked is None:
                 session.add(SysRoleMenu(role_id=admin_role.id, menu_id=mid))
+
+    # 清理其他分支遗留菜单，避免侧栏嵌套错乱
+    if RETIRED_MENU_IDS:
+        retired = (
+            await session.execute(select(SysMenu).where(SysMenu.id.in_(RETIRED_MENU_IDS)))
+        ).scalars().all()
+        for menu in retired:
+            menu.is_deleted = True
+            menu.visible = False
 
 
 async def seed() -> None:

@@ -9,6 +9,16 @@ const http = axios.create({
   timeout: 30000,
 });
 
+let redirectingToLogin = false;
+
+function handleAuthFailure(): void {
+  clearTokens();
+  if (redirectingToLogin) return;
+  if (window.location.pathname.startsWith("/login")) return;
+  redirectingToLogin = true;
+  window.location.href = "/login";
+}
+
 http.interceptors.request.use((config) => {
   const token = getAccessToken();
   if (token) {
@@ -23,7 +33,11 @@ http.interceptors.response.use(
   (response) => {
     const body = response.data as ApiResponse;
     if (typeof body?.code === "number" && body.code !== ErrorCode.SUCCESS) {
-      return Promise.reject(ApiError.fromResponse(body.code, body.message, body.trace_id));
+      const apiError = ApiError.fromResponse(body.code, body.message, body.trace_id);
+      if (apiError.isAuthError) {
+        handleAuthFailure();
+      }
+      return Promise.reject(apiError);
     }
     return response;
   },
@@ -33,12 +47,16 @@ http.interceptors.response.use(
       if (typeof body?.code === "number") {
         const apiError = ApiError.fromResponse(body.code, body.message, body.trace_id);
         if (apiError.isAuthError) {
-          clearTokens();
-          if (!window.location.pathname.startsWith("/login")) {
-            window.location.href = "/login";
-          }
+          handleAuthFailure();
         }
         return Promise.reject(apiError);
+      }
+      // HTTP 401 无业务码时也跳登录
+      if (error.response.status === 401) {
+        handleAuthFailure();
+        return Promise.reject(
+          new ApiError(ErrorCode.TOKEN_INVALID, body.message || "令牌无效或已过期")
+        );
       }
     }
     return Promise.reject(

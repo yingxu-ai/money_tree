@@ -1,12 +1,17 @@
 import {
+  AlertOutlined,
   ApartmentOutlined,
+  ApiOutlined,
   AppstoreOutlined,
   BookOutlined,
+  ClusterOutlined,
   ControlOutlined,
   DashboardOutlined,
+  ExperimentOutlined,
   FileSearchOutlined,
   FolderOutlined,
   FundOutlined,
+  LineChartOutlined,
   MenuFoldOutlined,
   MenuOutlined,
   MenuUnfoldOutlined,
@@ -14,6 +19,8 @@ import {
   SettingOutlined,
   TableOutlined,
   TeamOutlined,
+  ThunderboltOutlined,
+  UnorderedListOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { Button, Dropdown, Layout, Menu, Typography } from "antd";
@@ -46,6 +53,13 @@ const iconMap: Record<string, React.ReactNode> = {
   AppstoreOutlined: <AppstoreOutlined />,
   FundOutlined: <FundOutlined />,
   TableOutlined: <TableOutlined />,
+  ClusterOutlined: <ClusterOutlined />,
+  ApiOutlined: <ApiOutlined />,
+  UnorderedListOutlined: <UnorderedListOutlined />,
+  ExperimentOutlined: <ExperimentOutlined />,
+  AlertOutlined: <AlertOutlined />,
+  LineChartOutlined: <LineChartOutlined />,
+  ThunderboltOutlined: <ThunderboltOutlined />,
 };
 
 function toMenuItems(nodes: MenuNode[]): Array<{
@@ -69,13 +83,22 @@ function toMenuItems(nodes: MenuNode[]): Array<{
     });
 }
 
+/** 侧栏选中项：钻取页映射到对应列表菜单 */
+function resolveSelectedKey(pathname: string): string {
+  if (pathname.startsWith("/dashboards")) return "/dashboards";
+  if (pathname === "/devices/collect") return "/devices/collect";
+  if (pathname.startsWith("/devices/")) return "/devices";
+  return pathname;
+}
+
 function collectOpenKeys(pathname: string, nodes: MenuNode[], parents: string[] = []): string[] {
+  const effectivePath = resolveSelectedKey(pathname);
   for (const node of nodes) {
     const key = node.type === "CATALOG" ? `menu-${node.id}` : node.path || `menu-${node.id}`;
-    if (node.path === pathname) return parents;
+    if (node.path === effectivePath) return parents;
     if (node.children?.length) {
       const found = collectOpenKeys(pathname, node.children, [...parents, key]);
-      if (found.length || node.children.some((c) => c.path === pathname)) {
+      if (found.length || node.children.some((c) => c.path === effectivePath)) {
         return found.length ? found : [...parents, key];
       }
     }
@@ -131,10 +154,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     setOpened((prev) => Array.from(new Set([...prev, ...openKeys])));
   }, [openKeys]);
 
-  // 驾驶舱详情页也高亮「驾驶舱」菜单
-  const selectedKey = location.pathname.startsWith("/dashboards")
-    ? "/dashboards"
-    : location.pathname;
+  const selectedKey = resolveSelectedKey(location.pathname);
 
   const onMenuClick = ({ key }: { key: string }) => {
     // 仅 path 型菜单跳转；目录 key 以 menu- 开头不跳转

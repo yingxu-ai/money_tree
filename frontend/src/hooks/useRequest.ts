@@ -8,6 +8,8 @@ export interface UseRequestOptions<T> {
   notifyOnError?: boolean;
   onSuccess?: (data: T) => void;
   onError?: (err: unknown) => void;
+  /** 变化时重新请求（如路由 page / device_id） */
+  deps?: unknown[];
 }
 
 export interface UseRequestResult<T, A extends unknown[]> {
@@ -26,7 +28,7 @@ export function useRequest<T, A extends unknown[] = []>(
   service: (...args: A) => Promise<T>,
   options: UseRequestOptions<T> = {},
 ): UseRequestResult<T, A> {
-  const { immediate = true, notifyOnError = true, onSuccess, onError } = options;
+  const { immediate = true, notifyOnError = true, onSuccess, onError, deps } = options;
   const [data, setData] = useState<T>();
   const [loading, setLoading] = useState(Boolean(immediate));
   const [error, setError] = useState<unknown>();
@@ -62,9 +64,8 @@ export function useRequest<T, A extends unknown[] = []>(
     if (immediate) {
       void run(...([] as unknown as A));
     }
-    // 仅挂载时自动跑一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, deps ?? []);
 
   return { data, loading, error, run, refresh, setData };
 }

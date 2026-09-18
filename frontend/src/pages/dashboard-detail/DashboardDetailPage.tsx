@@ -1,5 +1,6 @@
 import { ReloadOutlined } from "@ant-design/icons";
 import { Button, Card, Collapse, Descriptions, List, Space, Spin, Tag, Typography, message } from "antd";
+import { notifyError } from "@/components/kit/feedback";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { executeSkill, fetchDashboard } from "@/api/system";
@@ -54,7 +55,7 @@ export default function DashboardDetailPage() {
       setAnalysis(result as Record<string, unknown>);
       message.success("分析完成");
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "分析失败");
+      notifyError(err, "分析失败");
     } finally {
       setAnalyzing(false);
     }

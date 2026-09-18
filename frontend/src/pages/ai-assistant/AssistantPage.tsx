@@ -13,6 +13,7 @@ import {
 } from "antd";
 import { useState } from "react";
 import { aiQuery } from "@/api/system";
+import { notifyError } from "@/components/kit/feedback";
 
 const SUGGESTIONS = [
   "今日产量多少？",
@@ -59,7 +60,7 @@ export default function AssistantPage() {
         message.success("分析完成");
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "请求失败");
+      notifyError(err, "请求失败");
     } finally {
       setLoading(false);
     }
@@ -78,7 +79,7 @@ export default function AssistantPage() {
       <Card title="AI 助手">
         <Space direction="vertical" style={{ width: "100%" }} size="middle">
           <Typography.Text type="secondary">
-            自然语言会经 Query Pipeline 自动路由到 固定 API / Tool / Skill（Demo 规则引擎，可替换 LLM）。
+            自然语言经 Query Pipeline 自动路由到 API / Tool / Skill。
           </Typography.Text>
           <Input.TextArea
             rows={3}

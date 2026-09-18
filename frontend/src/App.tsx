@@ -17,6 +17,15 @@ import DictsPage from "@/pages/system/DictsPage";
 import AssistantPage from "@/pages/ai-assistant/AssistantPage";
 import OverviewTemplatePage from "@/pages/demo/OverviewTemplatePage";
 import QueryTableTemplatePage from "@/pages/demo/QueryTableTemplatePage";
+import CollectConfigPage from "@/pages/equipment-analysis/CollectConfigPage";
+import DeviceListPage from "@/pages/equipment-analysis/DeviceListPage";
+import DeviceDetailPage from "@/pages/equipment-analysis/DeviceDetailPage";
+import DeviceComparePage from "@/pages/equipment-analysis/DeviceComparePage";
+import AnalysisDiagnosisPage from "@/pages/equipment-analysis/AnalysisDiagnosisPage";
+
+function RedirectDiagnosis() {
+  return <Navigate to="/analysis/diagnosis" replace />;
+}
 
 function Bootstrap() {
   const bootstrapAuth = useAuthStore((s) => s.bootstrap);
@@ -37,7 +46,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<Navigate to="/dashboards" replace />} />
+          <Route path="/" element={<Navigate to="/devices" replace />} />
           <Route path="/dashboards" element={<DashboardListPage />} />
           <Route path="/dashboards/:id" element={<DashboardDetailPage />} />
           <Route path="/system/users" element={<UsersPage />} />
@@ -51,7 +60,15 @@ export default function App() {
           <Route path="/ai-assistant" element={<AssistantPage />} />
           <Route path="/demo/overview" element={<OverviewTemplatePage />} />
           <Route path="/demo/query-table" element={<QueryTableTemplatePage />} />
-          <Route path="*" element={<Navigate to="/dashboards" replace />} />
+          <Route path="/devices/collect" element={<CollectConfigPage />} />
+          <Route path="/devices" element={<DeviceListPage />} />
+          <Route path="/devices/:id" element={<DeviceDetailPage />} />
+          <Route path="/analysis/diagnosis" element={<AnalysisDiagnosisPage />} />
+          <Route path="/analysis/current" element={<RedirectDiagnosis />} />
+          <Route path="/analysis/compare" element={<DeviceComparePage />} />
+          <Route path="/analysis/future" element={<RedirectDiagnosis />} />
+          <Route path="/analysis/optimize" element={<RedirectDiagnosis />} />
+          <Route path="*" element={<Navigate to="/devices" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

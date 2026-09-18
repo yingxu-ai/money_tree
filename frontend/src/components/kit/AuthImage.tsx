@@ -2,7 +2,7 @@ import { useEffect, useState, type ImgHTMLAttributes } from "react";
 import { getAccessToken } from "@/utils/tokenStorage";
 import { isStaticAvatar } from "@/config/avatars";
 
-interface AuthImageProps extends ImgHTMLAttributes<HTMLImageElement> {
+interface AuthImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> {
   /** 静态路径、http(s)、或需鉴权的 /api/v1/files/{id}/content */
   src?: string | null;
   fallbackSrc?: string;
