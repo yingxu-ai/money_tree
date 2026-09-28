@@ -1,7 +1,7 @@
 # 模块化平台与按组售卖 — 执行计划
 
 > 分支：`feat/modular-platform`  
-> 状态：**Phase 0～5 骨架完成** — 三大业务模块已进 `modules/`；设备分析后端已迁；导出脚本含裁剪 registry + 未购校验；嵌入说明见 `docs/customer-embed-guide.md`  
+> 状态：**Phase 0～6 收尾完成（骨架可用）** — 详见文末「已知债」；过渡期旧路径 re-export 仍保留  
 > 日期：2026-09-28  
 > 基线：由 `demo/equipment-analysis` 拉出；现有交付分支不在本计划中大改
 
@@ -349,5 +349,4 @@ backend/app/
 
 ## 10. 下一步
 
-你确认 §9 后，按 **Phase 0 → 1 → 2…** 在本分支实施。  
-**模式 B 的接口级拦截**放在 Phase 2 就做实；**模式 A 的导出脚本**放在 Phase 5（模块迁完才拷得干净）。
+本分支 Phase 0～6 骨架已闭环。后续按「已知债」与真实客户交付节奏迭代：删 re-export、租户级 SKU、SSO、CI 挂 `check_module_imports`。
