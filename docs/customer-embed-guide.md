@@ -34,7 +34,7 @@ VITE_EDITION=sku-scheduling-remote
 
 1. 对方菜单链到我们的业务 URL（可带 `embed=1`）
 2. 登录：一期使用我方登录页拿 JWT；二期再接 SSO
-3. 子路径部署时配置前端 `basename`（edition 字段，后续接 BrowserRouter）
+3. 子路径部署：在 `editions/*.json` 设置 `"basename": "/oa/ai-scheduling"`（有前导 `/`、无尾 `/`）；`BrowserRouter` 已读取
 
 ## 模式 A 导出
 

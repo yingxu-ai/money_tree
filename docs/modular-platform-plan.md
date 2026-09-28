@@ -224,87 +224,54 @@ backend/app/
 
 ---
 
-## 6. 分阶段执行（确认后按序做）
+## 6. 分阶段执行
 
-### Phase 0 — 约定与脚手架（约 0.5～1 天）
+### Phase 0 — 约定与脚手架 ✅
 
-- [ ] 定稿模块命名列表（首批建议）：
-  - `platform`（壳，不售卖，模式 A 必带）
-  - `system`（系统管理，默认随壳；远程可按客户决定是否开放）
-  - `scheduling`
-  - `equipment-analysis`
-  - `toolbox`（单位换算、文件数据分析等）
-- [ ] 本文定稿；`editions/*.json` 示例含：`enabled_modules`、`delivery_mode`、`layout_mode`、`basename`
-- [ ] 每个模块空 `MANIFEST` 模板（供导出脚本用）
+- [x] 模块命名：platform / system / dashboard / demo / scheduling / equipment-analysis / toolbox
+- [x] `editions/*.json`、`modules/*/MANIFEST.json`、`modules/README.md`
 
-**验收：** 文档与示例 JSON 评审通过；尚不迁业务代码。
+### Phase 1 — 平台壳 + layout_mode ✅
 
----
+- [x] `platform/edition`、`EmbedShell`、`?embed=1`
+- [x] `BrowserRouter` 读取 edition `basename`
 
-### Phase 1 — 平台壳抽出 + layout_mode（约 2～3 天）
+### Phase 2 — 注册表 + SKU 守卫 ✅
 
-- [ ] 将 `MainLayout` / 登录守卫 / 品牌读取收拢到 `platform/`
-- [ ] 实现 `layout_mode`：`full` | `embed`（配置 + `?embed=1`）
-- [ ] embed 下不渲染 Sider / Header（或 Header 可配）
+- [x] 前端 `register` + `registry`；菜单过滤；未购路由 forbidden
+- [x] 后端 `ENABLED_MODULES` + `module_guard` API 403
 
-**验收：**  
-同账号下 `full` 与 `embed=1` 切换；embed 无左侧导航；业务页可打开。
+### Phase 3～4 — 业务迁入 modules ✅
 
----
+- [x] toolbox / scheduling / equipment-analysis（前后端）
+- [x] 旧路径过渡 re-export 保留
 
-### Phase 2 — 模块注册表 + 运行时 SKU 守卫（模式 B 基础）（约 2～4 天）
+### Phase 5 — 导出 + 嵌入说明 ✅
 
-- [ ] 前端：每个模块导出 `register()`（routes 列表）
-- [ ] `App.tsx`：读 edition / 租户 SKU → 合并路由
-- [ ] 后端：`ENABLED_MODULES` 或租户 SKU → 条件挂载 **或** 全量挂载 + **API 模块守卫**
-- [ ] 菜单按 SKU 过滤；未购 path → 403/404
-- [ ] （模式 B）拒绝未购 module 的 API，返回明确错误码
+- [x] `scripts/export_edition.py`（裁剪 registry、校验未购、`.env.example`）
+- [x] `docs/customer-embed-guide.md`
+- [ ] （后置可选）构建期按 edition 拆制品流水线
 
-**验收：**  
-远程模拟租户只开 `scheduling`：排产页与 API 可用；设备分析页与 API 均 403。
+### Phase 6 — 收尾 ✅
+
+- [x] `demo-scaffold.md`、`开发计划.md`
+- [x] `scripts/check_module_imports.py`
+- [x] 已知债清单（§6.1）
 
 ---
 
-### Phase 3 — 迁首个样板模块（约 2～3 天）
+## 6.1 已知债（后续迭代）
 
-优先迁耦合清晰的一个（建议 **`toolbox`** 或 **`scheduling`**）：
-
-- [ ] 页面、api client、后端 router 迁入 `modules/<name>/`
-- [ ] 补齐 MANIFEST；消灭跨业务 import
-- [ ] 更新 seed 菜单归属该 module id
-
-**验收：** 该模块在「仅启用自己」下可独立演示（远程守卫 + 本地只启该模块）。
-
----
-
-### Phase 4 — 迁其余业务模块（约 3～5 天）
-
-- [ ] `equipment-analysis` / `scheduling`（若未做）/ `system` 归属明确
-- [ ] 过渡期旧路径 re-export 可留 1～2 周
-
-**验收：** 至少两份 edition 可切换；模式 B 多租户 SKU 可演示。
-
----
-
-### Phase 5 — 模式 A 导出脚本 + 嵌入说明（约 2～3 天）
-
-- [ ] `scripts/export_edition.py`：按 MANIFEST 复制 `platform + enabled_modules` → 交付目录
-- [ ] 校验：导出包内 **不存在** 未购模块路径
-- [ ] 导出包可本地启动的最小说明（README）
-- [ ] 《远程嵌入接入说明》：embed、Token、basename；《代码交付清单》对照表
-- [ ] （可选）构建期裁剪增强
-
-**验收：**  
-- 模式 A：导出「仅排产」包，目录树无设备分析源码，能启动。  
-- 模式 B：托管环境租户只能打排产 API。
-
----
-
-### Phase 6 — 收尾（约 1 天）
-
-- [ ] 更新 `demo-scaffold.md`：新业务必须落在 `modules/<场景>` 并登记 MANIFEST
-- [ ] 更新 `开发计划.md`
-- [ ] 已知债：跨模块依赖、设备分析权限码、SSO、模式 B 细接口白名单
+| 项 | 说明 | 优先级 |
+|----|------|--------|
+| 过渡 re-export | `pages/*`、`api/scheduling.ts` 等仍转发到 modules，稳定后可删 | 中 |
+| system/dashboard 物理收拢 | 现 register + 原 pages；导出靠 MANIFEST | 中 |
+| 设备分析细权限码 | 已有模块级 SKU；按钮级未对齐排产 | 低 |
+| SSO | embed 客户门户登录一期仍走我方 JWT | 高（有客户时） |
+| 模式 B 单 API 白名单 | 一期按 module | 低 |
+| 租户表绑定 SKU | 现用 `ENABLED_MODULES` 环境变量 | 高（多客户托管时） |
+| 跨模块检查挂 CI | `python scripts/check_module_imports.py` | 中 |
+| basename 反代实机 | edition 字段已接入，需子路径实测 | 中 |
 
 ---
 
@@ -313,40 +280,31 @@ backend/app/
 | 风险 | 对策 |
 |------|------|
 | 大搬迁影响交付分支 | 只在 `feat/modular-platform` 做；壳改动可择机 cherry-pick |
-| 模式 A 漏依赖导致客户包跑不起来 | MANIFEST + 导出后自动 `import`/启动冒烟 |
-| 模式 B 只藏菜单、API 仍开放 | Phase 2 必须上 API 模块守卫，验收项写死 |
-| 跨模块 import 导致「少拷就挂」 | lint / 检查脚本禁止 `modules/A` → `modules/B` |
-| embed 丢登录态 | 接入说明 + 联调清单 |
+| 模式 A 漏依赖导致客户包跑不起来 | MANIFEST + 导出校验 + 冒烟 |
+| 模式 B 只藏菜单、API 仍开放 | 已上 API 模块守卫 |
+| 跨模块 import 导致「少拷就挂」 | `check_module_imports.py` |
+| embed 丢登录态 | 接入说明；SSO 后置 |
 
 ---
 
-## 8. 建议排期（灵活）
+## 8. 建议排期（回顾）
 
-| 阶段 | 预估 | 主要服务哪种卖法 |
-|------|------|------------------|
-| Phase 0 | 0.5～1 天 | A+B 约定 |
-| Phase 1 | 2～3 天 | A+B 嵌入 |
-| Phase 2 | 2～4 天 | **B 远程限制** 优先可用 |
-| Phase 3～4 | 5～8 天 | A+B 边界 |
-| Phase 5 | 2～3 天 | **A 代码导出** 落地 |
-| Phase 6 | 1 天 | 文档收口 |
-
-合计约 **2～3 周**（单人主路径）。
+合计约 **2～3 周**主路径；本分支已完成骨架闭环。
 
 ---
 
-## 9. 评审确认清单（请你拍板）
+## 9. 评审结论（已按此执行）
 
-1. [ ] 售卖就这两种：**A 拷代码本地部署** / **B 远程限制页+接口** — **是否即以本文为准？**
-2. [ ] 分支策略：模块化只在 `feat/modular-platform` — **是否同意？**
-3. [ ] 首迁样板模块：`toolbox` / `scheduling` / 其他 — **选哪个？**
-4. [ ] 模式 B 一期粒度：**按 module**（不先做单 API 白名单）— **是否同意？**
-5. [ ] 模式 A 一期：脚本按 MANIFEST **复制源码目录**（不做复杂 monorepo publish）— **是否同意？**
-6. [ ] `layout_mode` 一期含 `embed` + `?embed=1` — **是否同意？**
-7. [ ] 系统管理默认随平台壳（模式 A 导出时带上；模式 B 可对客户关闭）— **是否同意？**
+1. [x] 售卖模式 A 拷代码 / B 远程限制页+接口  
+2. [x] 工作在 `feat/modular-platform`  
+3. [x] 样板先 toolbox，再 scheduling / equipment-analysis  
+4. [x] 模式 B 一期按 module  
+5. [x] 模式 A 按 MANIFEST 复制目录  
+6. [x] embed + `?embed=1`  
+7. [x] 系统管理默认随壳  
 
 ---
 
 ## 10. 下一步
 
-本分支 Phase 0～6 骨架已闭环。后续按「已知债」与真实客户交付节奏迭代：删 re-export、租户级 SKU、SSO、CI 挂 `check_module_imports`。
+按 §6.1 已知债与真实客户节奏迭代：删 re-export、租户级 SKU、SSO、CI 挂导入检查。
