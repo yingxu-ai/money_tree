@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     default_admin_username: str = "admin"
     default_admin_password: str = "admin123"
 
+    # 模式 B：逗号分隔 module_id；空 / * / all = 全开
+    # 例：ENABLED_MODULES=scheduling 或 scheduling,toolbox
+    enabled_modules: str = "*"
+
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")

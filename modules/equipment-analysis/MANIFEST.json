@@ -1,0 +1,13 @@
+{
+  "module_id": "equipment-analysis",
+  "name": "设备分析",
+  "frontend_paths": ["frontend/src/pages/equipment-analysis"],
+  "frontend_api_paths": ["frontend/src/api/equipmentAnalysis.ts"],
+  "backend_paths": [
+    "backend/app/api/equipment_analysis.py",
+    "backend/app/equipment_analysis"
+  ],
+  "menu_ids": [15, 16, 17, 18],
+  "api_path_prefixes": ["/api/v1/equipment-analysis"],
+  "route_prefixes": ["/devices", "/analysis"]
+}

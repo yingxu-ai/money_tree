@@ -1,0 +1,10 @@
+{
+  "module_id": "demo",
+  "name": "Demo 范本",
+  "frontend_paths": ["frontend/src/pages/demo"],
+  "frontend_api_paths": [],
+  "backend_paths": ["backend/app/api/demo.py", "backend/fixtures"],
+  "menu_ids": [12, 13, 14],
+  "api_path_prefixes": ["/api/v1/demo"],
+  "route_prefixes": ["/demo"]
+}

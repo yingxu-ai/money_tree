@@ -10,6 +10,7 @@ from app.auth.context import CurrentUser
 from app.auth.data_scope import resolve_effective_scope
 from app.core.database import get_session
 from app.core.exceptions import AuthException, PermissionException
+from app.core.module_guard import assert_module_allowed
 from app.core.security import decode_token
 from app.models.system import SysPermission, SysRole, SysRolePermission, SysUser, SysUserRole
 
@@ -90,7 +91,10 @@ async def enforce_api_permission(
     """
     全局接口权限：若配置台有启用规则，则校验对应权限码。
     无规则 / 未启用 → 不拦截（由各接口自己的 Depends 决定是否登录）。
+    另：按 ENABLED_MODULES 做模块级拦截（模式 B）。
     """
+    assert_module_allowed(request)
+
     if is_public_api_path(request.url.path):
         return
 

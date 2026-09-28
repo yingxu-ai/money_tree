@@ -1,0 +1,15 @@
+{
+  "id": "default",
+  "name": "全模块演示",
+  "delivery_mode": "remote_hosted",
+  "layout_mode": "full",
+  "basename": "/",
+  "enabled_modules": [
+    "system",
+    "dashboard",
+    "demo",
+    "equipment-analysis",
+    "scheduling",
+    "toolbox"
+  ]
+}

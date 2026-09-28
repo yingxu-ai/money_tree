@@ -35,6 +35,7 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import UserAvatar from "@/components/kit/UserAvatar";
 import UserProfileModal from "@/components/UserProfileModal";
 import { useAppConfig, useDocumentTitle } from "@/hooks/useAppConfig";
+import { filterMenusByEdition } from "@/platform/menu/filterMenusByEdition";
 import { useAppConfigStore } from "@/stores/appConfigStore";
 import { useAuthStore } from "@/stores/authStore";
 import type { MenuNode } from "@/types";
@@ -156,10 +157,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     document.documentElement.dataset.navLayout = navLayout;
   }, [navLayout]);
 
-  const menuItems = useMemo(() => toMenuItems(menus), [menus]);
+  const visibleMenus = useMemo(() => filterMenusByEdition(menus), [menus]);
+  const menuItems = useMemo(() => toMenuItems(visibleMenus), [visibleMenus]);
   const openKeys = useMemo(
-    () => collectOpenKeys(location.pathname, menus),
-    [location.pathname, menus]
+    () => collectOpenKeys(location.pathname, visibleMenus),
+    [location.pathname, visibleMenus]
   );
   const [opened, setOpened] = useState<string[]>([]);
   const [profileOpen, setProfileOpen] = useState(false);

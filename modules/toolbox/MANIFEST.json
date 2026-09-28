@@ -1,0 +1,18 @@
+{
+  "module_id": "toolbox",
+  "name": "工具箱",
+  "frontend_paths": [
+    "frontend/src/pages/tools",
+    "frontend/src/pages/system/FileAnalyzeModal.tsx",
+    "frontend/src/pages/system/FileChartBuilderPanel.tsx",
+    "frontend/src/pages/system/FileSpectrumPanel.tsx",
+    "frontend/src/pages/system/fileChartBuilder.ts",
+    "frontend/src/pages/system/PlotlyChartWorkbench.tsx",
+    "frontend/src/pages/system/usePlotly.ts"
+  ],
+  "frontend_api_paths": [],
+  "backend_paths": [],
+  "menu_ids": [70, 71, 72],
+  "api_path_prefixes": [],
+  "route_prefixes": ["/tools"]
+}

@@ -1,0 +1,8 @@
+{
+  "id": "sku-scheduling-local",
+  "name": "仅排产 · 代码交付本地部署",
+  "delivery_mode": "code_export",
+  "layout_mode": "full",
+  "basename": "/",
+  "enabled_modules": ["system", "dashboard", "scheduling"]
+}

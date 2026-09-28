@@ -1,0 +1,8 @@
+{
+  "id": "sku-scheduling-remote",
+  "name": "仅排产 · 远程托管",
+  "delivery_mode": "remote_hosted",
+  "layout_mode": "embed",
+  "basename": "/",
+  "enabled_modules": ["scheduling"]
+}

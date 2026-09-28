@@ -1,0 +1,10 @@
+{
+  "module_id": "scheduling",
+  "name": "生产排产",
+  "frontend_paths": ["frontend/src/pages/scheduling"],
+  "frontend_api_paths": ["frontend/src/api/scheduling.ts"],
+  "backend_paths": ["backend/app/api/scheduling.py", "backend/app/scheduling"],
+  "menu_ids": [60, 61, 62, 63, 64],
+  "api_path_prefixes": ["/api/v1/scheduling"],
+  "route_prefixes": ["/scheduling"]
+}

@@ -1,0 +1,25 @@
+{
+  "module_id": "dashboard",
+  "name": "基座业务页",
+  "frontend_paths": [
+    "frontend/src/pages/dashboard-list",
+    "frontend/src/pages/dashboard-detail",
+    "frontend/src/pages/ai-assistant"
+  ],
+  "frontend_api_paths": [],
+  "backend_paths": [
+    "backend/app/api/dashboard.py",
+    "backend/app/api/metrics.py",
+    "backend/app/api/config.py",
+    "backend/app/api/files.py",
+    "backend/app/api/runtime.py"
+  ],
+  "menu_ids": [5, 6, 7, 8],
+  "api_path_prefixes": [
+    "/api/v1/dashboards",
+    "/api/v1/metrics",
+    "/api/v1/configs",
+    "/api/v1/files"
+  ],
+  "route_prefixes": ["/dashboards", "/ai-assistant", "/configs", "/files"]
+}
