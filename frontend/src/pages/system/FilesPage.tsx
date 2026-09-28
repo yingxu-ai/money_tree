@@ -1,6 +1,6 @@
-import { Space } from "antd";
+import { Button, Space, Tooltip } from "antd";
 import { useCallback, useEffect, useState } from "react";
-import { deleteFile, fetchFiles, type FileItem } from "@/api/files";
+import { deleteFile, fetchFiles, isFileAnalyzable, type FileItem } from "@/api/files";
 import {
   DataTable,
   DeleteAction,
@@ -11,6 +11,8 @@ import {
 } from "@/components/kit";
 import { usePagination } from "@/hooks/usePagination";
 import { useRequest } from "@/hooks/useRequest";
+import { Permission } from "@/permissions";
+import FileAnalyzeModal from "./FileAnalyzeModal";
 
 function formatSize(size: number) {
   if (size < 1024) return `${size} B`;
@@ -20,6 +22,7 @@ function formatSize(size: number) {
 
 export default function FilesPage() {
   const [keyword, setKeyword] = useState("");
+  const [analyzeFile, setAnalyzeFile] = useState<FileItem | null>(null);
   const { page, pageSize, setFromResult, tablePagination, setPage } = usePagination({
     pageSize: 20,
   });
@@ -72,24 +75,52 @@ export default function FilesPage() {
           { title: "上传时间", dataIndex: "created_at", width: 180 },
           {
             title: "操作",
-            width: 180,
-            render: (_, record) => (
-              <Space>
-                <FileDownloadButton fileId={record.id} filename={record.original_name} />
-                <DeleteAction
-                  permission="file:delete"
-                  title="确认删除文件？"
-                  content={`将删除「${record.original_name}」。`}
-                  successMessage="已删除"
-                  onConfirm={async () => {
-                    await deleteFile(record.id);
-                    await reload();
-                  }}
-                />
-              </Space>
-            ),
+            width: 260,
+            render: (_, record) => {
+              const canAnalyze = isFileAnalyzable(record);
+              return (
+                <Space>
+                  <FileDownloadButton fileId={record.id} filename={record.original_name} />
+                  <Permission code="file:view">
+                    <Tooltip
+                      title={
+                        canAnalyze
+                          ? undefined
+                          : "暂仅支持 .xlsx / .csv，PDF / 图片 / 旧版 .xls 等暂不支持"
+                      }
+                    >
+                      <span>
+                        <Button
+                          size="small"
+                          disabled={!canAnalyze}
+                          onClick={() => setAnalyzeFile(record)}
+                        >
+                          数据分析
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  </Permission>
+                  <DeleteAction
+                    permission="file:delete"
+                    title="确认删除文件？"
+                    content={`将删除「${record.original_name}」。`}
+                    successMessage="已删除"
+                    onConfirm={async () => {
+                      await deleteFile(record.id);
+                      await reload();
+                    }}
+                  />
+                </Space>
+              );
+            },
           },
         ]}
+      />
+
+      <FileAnalyzeModal
+        file={analyzeFile}
+        open={!!analyzeFile}
+        onClose={() => setAnalyzeFile(null)}
       />
     </div>
   );

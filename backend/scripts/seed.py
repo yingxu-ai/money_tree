@@ -19,6 +19,7 @@ from app.core.security import hash_password
 from app.models.dashboard import Dashboard, DashboardLayout, DashboardWidget, WidgetDefinition
 from app.models.infra import SysConfig
 from app.models.system import (
+    SysApiPermission,
     SysDept,
     SysDictItem,
     SysDictType,
@@ -62,6 +63,13 @@ PERMISSIONS = [
     ("file:upload", "上传文件", "file", "upload"),
     ("file:delete", "删除文件", "file", "delete"),
     ("audit:view", "查看审计", "audit", "view"),
+    ("api_perm:view", "查看接口权限", "api_perm", "view"),
+    ("api_perm:manage", "管理接口权限", "api_perm", "manage"),
+    ("scheduling:view", "查看排产", "scheduling", "view"),
+    ("scheduling:gantt:edit", "调整排产计划", "scheduling", "gantt_edit"),
+    ("scheduling:report:start", "工序开工报工", "scheduling", "report_start"),
+    ("scheduling:report:early_start", "提前开工", "scheduling", "early_start"),
+    ("scheduling:variance:resolve", "计划实绩偏差处置", "scheduling", "variance"),
 ]
 
 MENUS = [
@@ -77,6 +85,7 @@ MENUS = [
     (9, 1, "审计日志", "/system/audit", "system/Audit", "MENU", 4, "FileSearchOutlined"),
     (10, 1, "部门管理", "/system/depts", "system/Depts", "MENU", 5, "ApartmentOutlined"),
     (11, 1, "字典管理", "/system/dicts", "system/Dicts", "MENU", 6, "BookOutlined"),
+    (25, 1, "接口权限", "/system/api-permissions", "system/ApiPermissions", "MENU", 7, "ApiOutlined"),
     # Demo 范本（复制用，非业务）
     (12, None, "Demo 范本", None, None, "CATALOG", 50, "AppstoreOutlined"),
     (13, 12, "总览范本", "/demo/overview", "demo/OverviewTemplate", "MENU", 1, "FundOutlined"),
@@ -86,6 +95,37 @@ MENUS = [
     (16, 15, "采集配置", "/devices/collect", "equipment-analysis/CollectConfig", "MENU", 1, "ApiOutlined"),
     (17, 15, "设备列表", "/devices", "equipment-analysis/DeviceList", "MENU", 2, "UnorderedListOutlined"),
     (18, 15, "分析诊断", "/analysis/diagnosis", "equipment-analysis/AnalysisDiagnosis", "MENU", 3, "ExperimentOutlined"),
+    # 生产排产 MVP（与设备分析平级，排在其下）
+    (60, None, "生产排产", None, None, "CATALOG", 6, "ScheduleOutlined"),
+    (61, 60, "基础数据", "/scheduling/master", "scheduling/MasterData", "MENU", 1, "TeamOutlined"),
+    (62, 60, "工单管理", "/scheduling/orders", "scheduling/WorkOrders", "MENU", 2, "UnorderedListOutlined"),
+    (63, 60, "排产甘特", "/scheduling/gantt", "scheduling/Gantt", "MENU", 3, "FundOutlined"),
+    (64, 60, "工序报工", "/scheduling/report", "scheduling/Report", "MENU", 4, "ThunderboltOutlined"),
+    # 工具箱（前端测算工具，可继续加子菜单）
+    (70, None, "工具箱", None, None, "CATALOG", 7, "ToolOutlined"),
+    (71, 70, "电石质检 ROI", "/tools/calcium-roi", "tools/calcium-roi/CalciumRoi", "MENU", 1, "CalculatorOutlined"),
+    (72, 70, "单位换算", "/tools/unit-converter", "tools/unit-converter/UnitConverter", "MENU", 2, "SwapOutlined"),
+]
+
+# 接口权限默认规则（相对 /api/v1）。enabled=True 才会全局拦截。
+# 排产试运行关键动作先入库；其余可在配置台「同步路由」后补齐。
+API_PERMISSION_RULES = [
+    ("GET", "/api-permissions", "api_perm:view", "接口权限列表", True, 10),
+    ("GET", "/api-permissions/routes", "api_perm:view", "已注册路由目录", True, 11),
+    ("POST", "/api-permissions/sync", "api_perm:manage", "同步路由到配置台", True, 12),
+    ("POST", "/api-permissions", "api_perm:manage", "新增接口权限", True, 13),
+    ("PUT", "/api-permissions/{rule_id}", "api_perm:manage", "更新接口权限", True, 14),
+    ("DELETE", "/api-permissions/{rule_id}", "api_perm:manage", "删除接口权限", True, 15),
+    ("GET", "/scheduling/gantt", "scheduling:view", "查看甘特", True, 20),
+    ("GET", "/scheduling/report", "scheduling:view", "工序报工/今日任务", True, 21),
+    ("PUT", "/scheduling/gantt/tasks/{op_id}", "scheduling:gantt:edit", "调整工序计划", True, 22),
+    ("POST", "/scheduling/gantt/tasks/{op_id}/resolve-variance", "scheduling:variance:resolve", "偏差处置", True, 23),
+    ("POST", "/scheduling/gantt/tasks/{op_id}/ack-busy", "scheduling:gantt:edit", "确认并行", True, 24),
+    ("POST", "/scheduling/report/{op_id}/start", "scheduling:report:start", "工序开工", True, 25),
+    ("POST", "/scheduling/report/{op_id}/finish", "scheduling:report:start", "工序完工", True, 26),
+    ("POST", "/scheduling/report/{op_id}/pause", "scheduling:report:start", "工序暂停", True, 27),
+    ("POST", "/scheduling/report/daily-log", "scheduling:report:start", "下班确认签字", True, 28),
+    ("DELETE", "/scheduling/report/daily-log/{log_id}", "scheduling:report:start", "删除报工记录", True, 29),
 ]
 
 # equipment-ops 分支曾占用的菜单 id（与本分支 15～20 冲突）；seed 时软删除，避免挂在「运行调优」下
@@ -505,6 +545,35 @@ async def _sync_menus_and_permissions(session) -> None:
             menu.visible = False
 
 
+async def _sync_api_permissions(session) -> None:
+    """增量写入接口权限规则（按 method + path_pattern 去重）。"""
+    for method, path, code, name, enabled, sort in API_PERMISSION_RULES:
+        exists = (
+            await session.execute(
+                select(SysApiPermission).where(
+                    SysApiPermission.method == method,
+                    SysApiPermission.path_pattern == path,
+                )
+            )
+        ).scalar_one_or_none()
+        if exists is None:
+            session.add(
+                SysApiPermission(
+                    method=method,
+                    path_pattern=path,
+                    permission_code=code,
+                    name=name,
+                    enabled=enabled,
+                    sort=sort,
+                )
+            )
+        else:
+            exists.permission_code = code
+            exists.name = name
+            exists.enabled = enabled
+            exists.sort = sort
+
+
 async def seed() -> None:
     await init_db()
     async with async_session_factory() as session:
@@ -513,6 +582,7 @@ async def seed() -> None:
             await _upsert_branding_configs(session)
             await _sync_demo_dashboard(session)
             await _sync_menus_and_permissions(session)
+            await _sync_api_permissions(session)
             await _sync_depts_and_dicts(session)
             await _sync_org_scope_demo(session)
             admin = (
@@ -523,7 +593,7 @@ async def seed() -> None:
             if admin and admin.dept_id is None:
                 admin.dept_id = 1
             await session.commit()
-            print("种子数据已存在，已同步品牌配置、演示驾驶舱、菜单权限、部门与字典、组织范围演示账号")
+            print("种子数据已存在，已同步品牌配置、演示驾驶舱、菜单权限、接口权限、部门与字典、组织范围演示账号")
             return
 
         permissions: list[SysPermission] = []
@@ -629,6 +699,7 @@ async def seed() -> None:
             )
 
         await _upsert_branding_configs(session)
+        await _sync_api_permissions(session)
         session.add(
             SysConfig(
                 scope_type="SYSTEM",

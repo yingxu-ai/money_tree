@@ -94,6 +94,15 @@ DATABASE_URL=sqlite+aiosqlite:///./data/app.db
 
 两套库数据相互独立，不会自动迁移业务数据。
 
+## 排产数据落库
+
+排产模块把完整状态存在表 **`scheduling_snapshot`**（JSON 快照），与 `DATABASE_URL` 同源：
+
+- 默认 SQLite：`backend/data/app.db`
+- 切换 PG 后自动写到同一 Postgres
+- 接口变更会落库；**试排（sandbox）中不写正式库**，发布后才写入
+- `POST /api/v1/scheduling/reset` 会还原演示 seed 并覆盖快照
+
 ## 说明
 
 | 项 | SQLite | PostgreSQL |

@@ -69,6 +69,67 @@ export async function downloadFile(id: number, filename: string) {
 
 export const deleteFile = (id: number) => deleteData(`/files/${id}`);
 
+export function isFileAnalyzable(file: Pick<FileItem, "original_name" | "mime_type">): boolean {
+  const name = (file.original_name || "").toLowerCase();
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
+  if ([".xlsx", ".xlsm", ".csv"].includes(ext)) return true;
+  const mime = (file.mime_type || "").toLowerCase();
+  return [
+    "text/csv",
+    "application/csv",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ].includes(mime);
+}
+
+export interface AnalyzeLabelOption {
+  key: string;
+  label: string;
+}
+
+export interface AnalyzeRow {
+  excel_row: number;
+  meta: Record<string, string | number | null>;
+  y: Array<number | null>;
+}
+
+export interface TableGridColumn {
+  key: string;
+  name: string;
+  index: number;
+  type: "number" | "string" | string;
+  numeric_ratio?: number;
+}
+
+export interface TableGrid {
+  source: string;
+  sheet: string;
+  columns: TableGridColumn[];
+  records: Array<Record<string, string | number | null>>;
+  tips: string[];
+  row_count: number;
+  column_count: number;
+  truncated?: boolean;
+}
+
+export interface FileAnalyzeResult {
+  source: string;
+  sheet: string;
+  waves: number[];
+  x_labels?: string[] | null;
+  meta_cols: string[];
+  label_options: AnalyzeLabelOption[];
+  rows: AnalyzeRow[];
+  tips: string[];
+  skipped_columns: string[];
+  series_count: number;
+  row_count: number;
+  /** P0 图表构建器用的行列网格 */
+  grid?: TableGrid | null;
+}
+
+export const fetchFileAnalyze = (id: number) =>
+  getData<FileAnalyzeResult>(`/files/${id}/analyze`);
+
 export const fetchOperationLogs = (page = 1, pageSize = 20) =>
   getData<PageResult<OperationLogItem>>("/audit/operations", {
     page,

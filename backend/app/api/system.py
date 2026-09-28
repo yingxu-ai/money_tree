@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.api_permission_service import ApiPermissionService
 from app.application.auth_service import UserService
 from app.application.dept_service import DeptService
 from app.application.dict_service import DictService
@@ -23,8 +25,27 @@ users_router = APIRouter(prefix="/users", tags=["用户管理"])
 roles_router = APIRouter(prefix="/roles", tags=["角色管理"])
 menus_router = APIRouter(prefix="/menus", tags=["菜单管理"])
 permissions_router = APIRouter(prefix="/permissions", tags=["权限管理"])
+api_permissions_router = APIRouter(prefix="/api-permissions", tags=["接口权限"])
 depts_router = APIRouter(prefix="/depts", tags=["部门管理"])
 dicts_router = APIRouter(prefix="/dicts", tags=["字典管理"])
+
+
+class ApiPermissionUpsert(BaseModel):
+    method: str = "GET"
+    path_pattern: str
+    permission_code: str = ""
+    name: str = ""
+    enabled: bool = False
+    sort: int = 0
+
+
+class ApiPermissionPatch(BaseModel):
+    method: str | None = None
+    path_pattern: str | None = None
+    permission_code: str | None = None
+    name: str | None = None
+    enabled: bool | None = None
+    sort: int | None = None
 
 
 @users_router.get("")
@@ -297,4 +318,62 @@ async def delete_dict_item(
     session: AsyncSession = Depends(get_session),
 ):
     await DictService(session).delete_item(item_id)
+    return success(None, trace_id=getattr(request.state, "trace_id", ""))
+
+
+@api_permissions_router.get("", dependencies=[Depends(require_permission("api_perm:view"))])
+async def list_api_permissions(request: Request, session: AsyncSession = Depends(get_session)):
+    return success(
+        await ApiPermissionService(session).list_rules(),
+        trace_id=getattr(request.state, "trace_id", ""),
+    )
+
+
+@api_permissions_router.get("/routes", dependencies=[Depends(require_permission("api_perm:view"))])
+async def list_registered_routes(request: Request):
+    """当前进程已注册的 API 路由目录，供配置台对照。"""
+    return success(
+        ApiPermissionService.list_app_routes(request.app),
+        trace_id=getattr(request.state, "trace_id", ""),
+    )
+
+
+@api_permissions_router.post("/sync", dependencies=[Depends(require_permission("api_perm:manage"))])
+async def sync_api_permissions(request: Request, session: AsyncSession = Depends(get_session)):
+    """从路由表增量同步：新路由写入且默认未启用，需补权限码后再开。"""
+    result = await ApiPermissionService(session).sync_from_app(request.app)
+    return success(result, trace_id=getattr(request.state, "trace_id", ""))
+
+
+@api_permissions_router.post("", dependencies=[Depends(require_permission("api_perm:manage"))])
+async def create_api_permission(
+    payload: ApiPermissionUpsert,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    row = await ApiPermissionService(session).create_rule(payload.model_dump())
+    return success(row, trace_id=getattr(request.state, "trace_id", ""))
+
+
+@api_permissions_router.put("/{rule_id}", dependencies=[Depends(require_permission("api_perm:manage"))])
+async def update_api_permission(
+    rule_id: int,
+    payload: ApiPermissionPatch,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    data = {k: v for k, v in payload.model_dump().items() if v is not None}
+    row = await ApiPermissionService(session).update_rule(rule_id, data)
+    return success(row, trace_id=getattr(request.state, "trace_id", ""))
+
+
+@api_permissions_router.delete(
+    "/{rule_id}", dependencies=[Depends(require_permission("api_perm:manage"))]
+)
+async def delete_api_permission(
+    rule_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    await ApiPermissionService(session).delete_rule(rule_id)
     return success(None, trace_id=getattr(request.state, "trace_id", ""))

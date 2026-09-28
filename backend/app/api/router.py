@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api import (
     audit,
@@ -11,16 +11,19 @@ from app.api import (
     metrics,
     public,
     runtime,
+    scheduling,
     system,
 )
+from app.auth.deps import enforce_api_permission
 
-api_router = APIRouter()
+api_router = APIRouter(dependencies=[Depends(enforce_api_permission)])
 api_router.include_router(public.router)
 api_router.include_router(auth.router)
 api_router.include_router(system.users_router)
 api_router.include_router(system.roles_router)
 api_router.include_router(system.menus_router)
 api_router.include_router(system.permissions_router)
+api_router.include_router(system.api_permissions_router)
 api_router.include_router(system.depts_router)
 api_router.include_router(system.dicts_router)
 api_router.include_router(dashboard.router)
@@ -31,3 +34,4 @@ api_router.include_router(runtime.router)
 api_router.include_router(audit.router)
 api_router.include_router(demo.router)
 api_router.include_router(equipment_analysis.router)
+api_router.include_router(scheduling.router)

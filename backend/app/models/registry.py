@@ -1,6 +1,7 @@
 # 确保所有表模型被 SQLModel metadata 注册
 from app.models.dashboard import Dashboard, DashboardLayout, DashboardWidget, WidgetDefinition
 from app.models.infra import SysConfig, SysFile, SysTask
+from app.models.scheduling import SchedulingSnapshot
 from app.models.system import (
     SysDept,
     SysDictItem,
@@ -8,6 +9,7 @@ from app.models.system import (
     SysLoginLog,
     SysMenu,
     SysOperationLog,
+    SysApiPermission,
     SysPermission,
     SysRole,
     SysRoleMenu,
@@ -25,6 +27,7 @@ __all__ = [
     "SysDictItem",
     "SysMenu",
     "SysPermission",
+    "SysApiPermission",
     "SysRoleMenu",
     "SysRolePermission",
     "SysLoginLog",
@@ -36,4 +39,5 @@ __all__ = [
     "SysConfig",
     "SysFile",
     "SysTask",
+    "SchedulingSnapshot",
 ]

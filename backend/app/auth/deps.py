@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.api_permission_service import ApiPermissionService, is_public_api_path
 from app.auth.context import CurrentUser
 from app.auth.data_scope import resolve_effective_scope
 from app.core.database import get_session
@@ -71,9 +72,36 @@ async def get_current_user(
 
 
 def require_permission(code: str) -> Callable:
+    """兼容旧写法；新接口优先走 sys_api_permission 配置台。"""
+
     async def checker(current: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         if not current.has_permission(code):
             raise PermissionException(f"缺少权限: {code}")
         return current
 
     return checker
+
+
+async def enforce_api_permission(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """
+    全局接口权限：若配置台有启用规则，则校验对应权限码。
+    无规则 / 未启用 → 不拦截（由各接口自己的 Depends 决定是否登录）。
+    """
+    if is_public_api_path(request.url.path):
+        return
+
+    service = ApiPermissionService(session)
+    rule = await service.find_required_permission(request.method, request.url.path)
+    if rule is None:
+        return
+    code = (rule.permission_code or "").strip()
+    if not code:
+        return
+
+    current = await get_current_user(request, credentials, session)
+    if not current.has_permission(code):
+        raise PermissionException(f"缺少权限: {code}（接口 {rule.method} {rule.path_pattern}）")

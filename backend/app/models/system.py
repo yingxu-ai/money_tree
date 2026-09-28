@@ -124,6 +124,23 @@ class SysPermission(SQLModel, table=True):
     tenant_id: int = Field(default=1, index=True)
 
 
+class SysApiPermission(SQLModel, table=True):
+    """接口权限映射：HTTP 方法 + 路径模板 → 权限码。由配置台维护，全局鉴权读取。"""
+
+    __tablename__ = "sys_api_permission"
+
+    id: int | None = Field(default=None, primary_key=True)
+    method: str = Field(index=True, max_length=16)  # GET/POST/PUT/DELETE/PATCH 或 *
+    path_pattern: str = Field(index=True, max_length=256)  # 相对 api_prefix，如 /scheduling/gantt
+    permission_code: str = Field(index=True, max_length=128)
+    name: str = Field(default="", max_length=128)
+    enabled: bool = Field(default=True)
+    sort: int = Field(default=0)
+    tenant_id: int = Field(default=1, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class SysRoleMenu(SQLModel, table=True):
     __tablename__ = "sys_role_menu"
 

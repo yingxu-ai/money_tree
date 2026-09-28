@@ -31,6 +31,35 @@ export const deleteMenu = (id: number) => deleteData(`/menus/${id}`);
 export const fetchPermissions = () =>
   getData<Array<{ id: number; code: string; name: string }>>("/permissions");
 
+export type ApiPermissionRule = {
+  id: number;
+  method: string;
+  path_pattern: string;
+  permission_code: string;
+  name: string;
+  enabled: boolean;
+  sort: number;
+  updated_at?: string | null;
+};
+
+export const fetchApiPermissions = () => getData<ApiPermissionRule[]>("/api-permissions");
+
+export const fetchRegisteredRoutes = () =>
+  getData<Array<{ method: string; path_pattern: string; name: string; tags: string[] }>>(
+    "/api-permissions/routes",
+  );
+
+export const syncApiPermissions = () =>
+  postData<{ created: number; total_routes: number }>("/api-permissions/sync");
+
+export const createApiPermission = (data: unknown) =>
+  postData<ApiPermissionRule>("/api-permissions", data);
+
+export const updateApiPermission = (id: number, data: unknown) =>
+  putData<ApiPermissionRule>(`/api-permissions/${id}`, data);
+
+export const deleteApiPermission = (id: number) => deleteData(`/api-permissions/${id}`);
+
 export const fetchDepts = () => getData<DeptItem[]>("/depts");
 export const createDept = (data: unknown) => postData<DeptItem>("/depts", data);
 export const updateDept = (id: number, data: unknown) => putData<DeptItem>(`/depts/${id}`, data);

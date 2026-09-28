@@ -9,6 +9,7 @@ import DashboardDetailPage from "@/pages/dashboard-detail/DashboardDetailPage";
 import UsersPage from "@/pages/system/UsersPage";
 import RolesPage from "@/pages/system/RolesPage";
 import MenusPage from "@/pages/system/MenusPage";
+import ApiPermissionsPage from "@/pages/system/ApiPermissionsPage";
 import ConfigsPage from "@/pages/system/ConfigsPage";
 import FilesPage from "@/pages/system/FilesPage";
 import AuditPage from "@/pages/system/AuditPage";
@@ -22,6 +23,12 @@ import DeviceListPage from "@/pages/equipment-analysis/DeviceListPage";
 import DeviceDetailPage from "@/pages/equipment-analysis/DeviceDetailPage";
 import DeviceComparePage from "@/pages/equipment-analysis/DeviceComparePage";
 import AnalysisDiagnosisPage from "@/pages/equipment-analysis/AnalysisDiagnosisPage";
+import MasterDataPage from "@/pages/scheduling/MasterDataPage";
+import WorkOrdersPage from "@/pages/scheduling/WorkOrdersPage";
+import GanttPage from "@/pages/scheduling/GanttPage";
+import ReportPage from "@/pages/scheduling/ReportPage";
+import CalciumRoiPage from "@/pages/tools/calcium-roi/CalciumRoiPage";
+import UnitConverterPage from "@/pages/tools/unit-converter/UnitConverterPage";
 
 function RedirectDiagnosis() {
   return <Navigate to="/analysis/diagnosis" replace />;
@@ -52,6 +59,7 @@ export default function App() {
           <Route path="/system/users" element={<UsersPage />} />
           <Route path="/system/roles" element={<RolesPage />} />
           <Route path="/system/menus" element={<MenusPage />} />
+          <Route path="/system/api-permissions" element={<ApiPermissionsPage />} />
           <Route path="/system/depts" element={<DeptsPage />} />
           <Route path="/system/dicts" element={<DictsPage />} />
           <Route path="/system/audit" element={<AuditPage />} />
@@ -68,6 +76,12 @@ export default function App() {
           <Route path="/analysis/compare" element={<DeviceComparePage />} />
           <Route path="/analysis/future" element={<RedirectDiagnosis />} />
           <Route path="/analysis/optimize" element={<RedirectDiagnosis />} />
+          <Route path="/scheduling/master" element={<MasterDataPage />} />
+          <Route path="/scheduling/orders" element={<WorkOrdersPage />} />
+          <Route path="/scheduling/gantt" element={<GanttPage />} />
+          <Route path="/scheduling/report" element={<ReportPage />} />
+          <Route path="/tools/calcium-roi" element={<CalciumRoiPage />} />
+          <Route path="/tools/unit-converter" element={<UnitConverterPage />} />
           <Route path="*" element={<Navigate to="/devices" replace />} />
         </Route>
       </Routes>

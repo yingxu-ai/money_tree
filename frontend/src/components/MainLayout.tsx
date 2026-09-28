@@ -4,6 +4,7 @@ import {
   ApiOutlined,
   AppstoreOutlined,
   BookOutlined,
+  CalculatorOutlined,
   ClusterOutlined,
   ControlOutlined,
   DashboardOutlined,
@@ -16,17 +17,19 @@ import {
   MenuOutlined,
   MenuUnfoldOutlined,
   RobotOutlined,
+  ScheduleOutlined,
   SettingOutlined,
   TableOutlined,
   TeamOutlined,
   ThunderboltOutlined,
+  ToolOutlined,
   UnorderedListOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { Button, Dropdown, Layout, Menu, Typography } from "antd";
 import type { MenuProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import LayoutSwitcher from "@/components/LayoutSwitcher";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import UserAvatar from "@/components/kit/UserAvatar";
@@ -60,6 +63,9 @@ const iconMap: Record<string, React.ReactNode> = {
   AlertOutlined: <AlertOutlined />,
   LineChartOutlined: <LineChartOutlined />,
   ThunderboltOutlined: <ThunderboltOutlined />,
+  ScheduleOutlined: <ScheduleOutlined />,
+  ToolOutlined: <ToolOutlined />,
+  CalculatorOutlined: <CalculatorOutlined />,
 };
 
 function toMenuItems(nodes: MenuNode[]): Array<{
@@ -74,10 +80,18 @@ function toMenuItems(nodes: MenuNode[]): Array<{
       const isCatalog = node.type === "CATALOG";
       // 目录用 menu-{id}，叶子页用真实 path，便于点击跳转与选中
       const key = isCatalog ? `menu-${node.id}` : node.path || `menu-${node.id}`;
+      const label =
+        !isCatalog && node.path ? (
+          <Link to={node.path} style={{ color: "inherit" }}>
+            {node.name}
+          </Link>
+        ) : (
+          node.name
+        );
       return {
         key,
         icon: node.icon ? iconMap[node.icon] : undefined,
-        label: node.name,
+        label,
         children: node.children?.length ? toMenuItems(node.children) : undefined,
       };
     });

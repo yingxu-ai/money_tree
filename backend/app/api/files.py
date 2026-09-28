@@ -3,8 +3,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.file_service import FileService
+from app.application.table_analysis import analyze_table_file, is_analyzable_name
 from app.auth.deps import get_current_user, require_permission
 from app.core.database import get_session
+from app.core.exceptions import ValidationException
 from app.core.response import ok
 
 router = APIRouter(prefix="/files", tags=["文件中心"])
@@ -71,6 +73,23 @@ async def file_content(
         filename=record.original_name,
         content_disposition_type="inline",
     )
+
+
+@router.get("/{file_id}/analyze", dependencies=[Depends(require_permission("file:view"))])
+async def analyze_file(
+    file_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    current=Depends(get_current_user),
+):
+    """解析 Excel / CSV 为曲线分析数据（非数值列默认不选，tips 提示）。"""
+    service = FileService(session)
+    record = await service.get_file(file_id, current.tenant_id)
+    if not is_analyzable_name(record.original_name, record.mime_type):
+        raise ValidationException("暂仅支持 Excel / CSV 数据分析，PDF 等格式请先转换")
+    path = await service.resolve_path(record)
+    data = analyze_table_file(path, source_name=record.original_name)
+    return ok(request, data)
 
 
 @router.delete("/{file_id}", dependencies=[Depends(require_permission("file:delete"))])
