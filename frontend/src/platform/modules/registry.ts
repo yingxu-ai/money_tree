@@ -1,11 +1,11 @@
-import { getActiveEdition, isModuleEnabled } from "@/platform/edition";
-import type { ModuleRoute } from "@/platform/modules/types";
+import { schedulingModule } from "@/modules/scheduling/register";
+import { toolboxModule } from "@/modules/toolbox/register";
+import { systemModule } from "@/modules/system/register";
 import { dashboardModule } from "@/modules/dashboard/register";
 import { demoModule } from "@/modules/demo/register";
 import { equipmentAnalysisModule } from "@/modules/equipment-analysis/register";
-import { schedulingModule } from "@/modules/scheduling/register";
-import { systemModule } from "@/modules/system/register";
-import { toolboxModule } from "@/modules/toolbox/register";
+import { getActiveEdition, isModuleEnabled } from "@/platform/edition";
+import type { ModuleRoute } from "@/platform/modules/types";
 
 const ALL_MODULES = [
   systemModule,

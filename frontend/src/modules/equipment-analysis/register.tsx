@@ -1,10 +1,10 @@
 import { Navigate } from "react-router-dom";
 import type { ModuleRegistration } from "@/platform/modules/types";
-import CollectConfigPage from "@/pages/equipment-analysis/CollectConfigPage";
-import DeviceListPage from "@/pages/equipment-analysis/DeviceListPage";
-import DeviceDetailPage from "@/pages/equipment-analysis/DeviceDetailPage";
-import DeviceComparePage from "@/pages/equipment-analysis/DeviceComparePage";
-import AnalysisDiagnosisPage from "@/pages/equipment-analysis/AnalysisDiagnosisPage";
+import CollectConfigPage from "./ui/CollectConfigPage";
+import DeviceListPage from "./ui/DeviceListPage";
+import DeviceDetailPage from "./ui/DeviceDetailPage";
+import DeviceComparePage from "./ui/DeviceComparePage";
+import AnalysisDiagnosisPage from "./ui/AnalysisDiagnosisPage";
 
 function RedirectDiagnosis() {
   return <Navigate to="/analysis/diagnosis" replace />;

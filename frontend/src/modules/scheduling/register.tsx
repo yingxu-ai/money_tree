@@ -1,8 +1,8 @@
 import type { ModuleRegistration } from "@/platform/modules/types";
-import MasterDataPage from "@/pages/scheduling/MasterDataPage";
-import WorkOrdersPage from "@/pages/scheduling/WorkOrdersPage";
-import GanttPage from "@/pages/scheduling/GanttPage";
-import ReportPage from "@/pages/scheduling/ReportPage";
+import MasterDataPage from "./pages/MasterDataPage";
+import WorkOrdersPage from "./pages/WorkOrdersPage";
+import GanttPage from "./pages/GanttPage";
+import ReportPage from "./pages/ReportPage";
 
 export const schedulingModule: ModuleRegistration = {
   moduleId: "scheduling",
@@ -13,3 +13,5 @@ export const schedulingModule: ModuleRegistration = {
     { moduleId: "scheduling", path: "/scheduling/report", element: <ReportPage /> },
   ],
 };
+
+export { MasterDataPage, WorkOrdersPage, GanttPage, ReportPage };

@@ -21,7 +21,7 @@ setup_logging()
 async def lifespan(app: FastAPI):
     await init_db()
     # 排产快照：表已就绪后从库加载（或写入初始 seed）
-    from app.scheduling.store import store
+    from app.modules.scheduling.store import store
 
     store.reload_from_db()
     yield

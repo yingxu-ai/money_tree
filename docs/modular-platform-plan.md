@@ -1,7 +1,7 @@
 # 模块化平台与按组售卖 — 执行计划
 
 > 分支：`feat/modular-platform`  
-> 状态：**Phase 0～2 骨架已落地，待联调**；Phase 3+ 模块目录物理迁移未做  
+> 状态：**Phase 0～4 进行中** — 壳/SKU/embed/守卫已落地；toolbox、scheduling、equipment-analysis 前端已迁入 `modules/`；scheduling 后端已迁入 `app/modules/scheduling`  
 > 日期：2026-09-28  
 > 基线：由 `demo/equipment-analysis` 拉出；现有交付分支不在本计划中大改
 

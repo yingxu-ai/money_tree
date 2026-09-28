@@ -1,1 +1,5 @@
-"""生产排产：内存运算 + scheduling_snapshot 落库（跟 DATABASE_URL）。"""
+"""过渡期兼容：原 app.scheduling → app.modules.scheduling"""
+
+from app.modules.scheduling.store import store
+
+__all__ = ["store"]
