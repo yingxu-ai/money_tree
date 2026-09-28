@@ -1,7 +1,7 @@
 # 模块化平台与按组售卖 — 执行计划
 
 > 分支：`feat/modular-platform`  
-> 状态：**Phase 0～4 进行中** — 壳/SKU/embed/守卫已落地；toolbox、scheduling、equipment-analysis 前端已迁入 `modules/`；scheduling 后端已迁入 `app/modules/scheduling`  
+> 状态：**Phase 0～5 骨架完成** — 三大业务模块已进 `modules/`；设备分析后端已迁；导出脚本含裁剪 registry + 未购校验；嵌入说明见 `docs/customer-embed-guide.md`  
 > 日期：2026-09-28  
 > 基线：由 `demo/equipment-analysis` 拉出；现有交付分支不在本计划中大改
 

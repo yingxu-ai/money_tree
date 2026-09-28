@@ -2,6 +2,7 @@
   "module_id": "dashboard",
   "name": "基座业务页",
   "frontend_paths": [
+    "frontend/src/modules/dashboard",
     "frontend/src/pages/dashboard-list",
     "frontend/src/pages/dashboard-detail",
     "frontend/src/pages/ai-assistant"

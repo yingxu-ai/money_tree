@@ -1,7 +1,10 @@
 {
   "module_id": "system",
   "name": "系统管理",
-  "frontend_paths": ["frontend/src/pages/system"],
+  "frontend_paths": [
+    "frontend/src/modules/system",
+    "frontend/src/pages/system"
+  ],
   "frontend_api_paths": ["frontend/src/api"],
   "backend_paths": ["backend/app/api/system.py", "backend/app/api/audit.py"],
   "menu_ids": [1, 2, 3, 4, 9, 10, 11, 25],

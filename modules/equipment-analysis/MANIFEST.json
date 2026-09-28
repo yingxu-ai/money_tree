@@ -4,8 +4,9 @@
   "frontend_paths": ["frontend/src/modules/equipment-analysis"],
   "frontend_api_paths": ["frontend/src/modules/equipment-analysis/api/equipmentAnalysis.ts"],
   "backend_paths": [
+    "backend/app/modules/equipment_analysis",
     "backend/app/api/equipment_analysis.py",
-    "backend/app/equipment_analysis"
+    "backend/fixtures/equipment_analysis"
   ],
   "menu_ids": [15, 16, 17, 18],
   "api_path_prefixes": ["/api/v1/equipment-analysis"],
