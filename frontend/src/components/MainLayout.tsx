@@ -35,7 +35,7 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import UserAvatar from "@/components/kit/UserAvatar";
 import UserProfileModal from "@/components/UserProfileModal";
 import { useAppConfig, useDocumentTitle } from "@/hooks/useAppConfig";
-import { filterMenusByEdition } from "@/platform/menu/filterMenusByEdition";
+import { filterMenusByAccess } from "@/platform/menu/filterMenusByEdition";
 import { useAppConfigStore } from "@/stores/appConfigStore";
 import { useAuthStore } from "@/stores/authStore";
 import type { MenuNode } from "@/types";
@@ -157,7 +157,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     document.documentElement.dataset.navLayout = navLayout;
   }, [navLayout]);
 
-  const visibleMenus = useMemo(() => filterMenusByEdition(menus), [menus]);
+  const visibleMenus = useMemo(
+    () => filterMenusByAccess(menus, user?.enabled_modules),
+    [menus, user?.enabled_modules],
+  );
   const menuItems = useMemo(() => toMenuItems(visibleMenus), [visibleMenus]);
   const openKeys = useMemo(
     () => collectOpenKeys(location.pathname, visibleMenus),

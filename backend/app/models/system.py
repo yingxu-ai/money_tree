@@ -5,6 +5,23 @@ from sqlmodel import Field, SQLModel
 from app.models.enums import UserStatus
 
 
+class SysTenant(SQLModel, table=True):
+    """租户（售卖模式 B：按租户开通模块）。"""
+
+    __tablename__ = "sys_tenant"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=128)
+    code: str = Field(index=True, unique=True, max_length=64)
+    # "*" / "all" = 全开；否则逗号分隔 module_id，如 scheduling,toolbox
+    enabled_modules: str = Field(default="*", max_length=512)
+    status: str = Field(default="active", max_length=32)
+    remark: str | None = Field(default=None, max_length=255)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    is_deleted: bool = Field(default=False)
+
+
 class SysDept(SQLModel, table=True):
     """组织部门，自关联树（parent_id）。"""
 

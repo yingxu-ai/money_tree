@@ -1,17 +1,15 @@
-"""按 SKU / ENABLED_MODULES 限制业务 API（模式 B）。
-
-平台与认证类前缀始终放行；未登记前缀默认放行（兼容过渡）。
-已登记且不属于 enabled_modules 的前缀 → 403。
-"""
+"""按租户 / 全局 SKU 限制业务 API（模式 B）。"""
 
 from __future__ import annotations
 
 from fastapi import HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.security import decode_token
 
-# path 相对 api_prefix 之后，例如 /scheduling/...
-# module_id 与 editions / MANIFEST 对齐
+# path 相对 api_prefix 之后
 MODULE_API_PREFIXES: dict[str, list[str]] = {
     "scheduling": ["/scheduling"],
     "equipment-analysis": ["/equipment-analysis"],
@@ -27,10 +25,8 @@ MODULE_API_PREFIXES: dict[str, list[str]] = {
         "/audit",
     ],
     "dashboard": ["/dashboards", "/metrics", "/configs", "/files"],
-    # toolbox 目前多为纯前端
 }
 
-# 始终放行（壳能力）
 ALWAYS_ALLOW_PREFIXES = (
     "/public",
     "/auth",
@@ -46,7 +42,6 @@ def _normalize_path(path: str) -> str:
 
 
 def resolve_module_for_api_path(api_path: str) -> str | None:
-    """返回该 API 所属 module_id；不属于任何业务模块则 None（放行）。"""
     path = _normalize_path(api_path)
     for module_id, prefixes in MODULE_API_PREFIXES.items():
         for prefix in prefixes:
@@ -57,21 +52,46 @@ def resolve_module_for_api_path(api_path: str) -> str | None:
 
 
 def parse_enabled_modules(raw: str | None) -> set[str] | None:
-    """None = 不限制（全开）；空串也视为全开。"""
-    if raw is None:
-        return None
-    text = raw.strip()
-    if not text or text.lower() in {"*", "all"}:
-        return None
-    return {x.strip() for x in text.split(",") if x.strip()}
+    """兼容旧引用；实现见 tenant_sku。"""
+    from app.application.tenant_sku import parse_enabled_modules as _parse
+
+    return _parse(raw)
 
 
-def assert_module_allowed(request: Request) -> None:
-    settings = get_settings()
-    enabled = parse_enabled_modules(settings.enabled_modules)
+def _tenant_id_from_credentials(
+    credentials: HTTPAuthorizationCredentials | None,
+) -> int | None:
+    if credentials is None or not credentials.credentials:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+    except ValueError:
+        return None
+    if payload.get("type") != "access":
+        return None
+    tid = payload.get("tenant_id")
+    if tid is None:
+        return None
+    try:
+        return int(tid)
+    except (TypeError, ValueError):
+        return None
+
+
+async def assert_module_allowed(
+    request: Request,
+    session: AsyncSession,
+    credentials: HTTPAuthorizationCredentials | None = None,
+) -> None:
+    # 延迟导入，避免与 tenant_sku 循环依赖
+    from app.application.tenant_sku import get_tenant_enabled_modules
+
+    tenant_id = _tenant_id_from_credentials(credentials)
+    enabled = await get_tenant_enabled_modules(session, tenant_id)
     if enabled is None:
         return
 
+    settings = get_settings()
     path = request.url.path
     prefix = settings.api_prefix.rstrip("/")
     if path.startswith(prefix):
@@ -91,5 +111,5 @@ def assert_module_allowed(request: Request) -> None:
     if module_id not in enabled:
         raise HTTPException(
             status_code=403,
-            detail=f"模块未开通: {module_id}",
+            detail=f"模块未开通: {module_id}（租户 {tenant_id or '-'}）",
         )

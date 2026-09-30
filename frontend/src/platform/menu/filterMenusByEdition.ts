@@ -2,8 +2,8 @@ import { getActiveEdition } from "@/platform/edition";
 import type { ModuleId } from "@/platform/edition/types";
 import type { MenuNode } from "@/types";
 
-/** 与 MANIFEST route_prefixes 对齐，用于侧栏按 SKU 裁剪 */
-const MODULE_ROUTE_PREFIXES: Record<ModuleId, string[]> = {
+/** 与 MANIFEST route_prefixes 对齐 */
+export const MODULE_ROUTE_PREFIXES: Record<ModuleId, string[]> = {
   system: ["/system"],
   dashboard: ["/dashboards", "/ai-assistant", "/configs", "/files"],
   demo: ["/demo"],
@@ -13,23 +13,46 @@ const MODULE_ROUTE_PREFIXES: Record<ModuleId, string[]> = {
 };
 
 function pathAllowed(path: string | null | undefined, allowedPrefixes: string[]): boolean {
-  if (!path) return true; // CATALOG 无 path，看子节点
+  if (!path) return true;
   return allowedPrefixes.some((p) => path === p || path.startsWith(p + "/"));
 }
 
-function collectAllowedPrefixes(): string[] {
-  const edition = getActiveEdition();
+function prefixesForModules(moduleIds: string[]): string[] {
   const prefixes: string[] = [];
-  for (const mid of edition.enabled_modules) {
-    prefixes.push(...(MODULE_ROUTE_PREFIXES[mid] || []));
+  for (const mid of moduleIds) {
+    prefixes.push(...(MODULE_ROUTE_PREFIXES[mid as ModuleId] || []));
   }
   return prefixes;
 }
 
-/** 按当前 edition 过滤菜单树（模式 B 侧栏） */
-export function filterMenusByEdition(nodes: MenuNode[]): MenuNode[] {
-  const allowed = collectAllowedPrefixes();
-  if (!allowed.length) return nodes;
+/**
+ * 侧栏裁剪：
+ * - enabledModules === null/undefined → 回退 edition.enabled_modules
+ * - enabledModules === [] → 无业务菜单
+ * - 数组 → 仅这些模块
+ */
+export function filterMenusByAccess(
+  nodes: MenuNode[],
+  enabledModules?: string[] | null,
+): MenuNode[] {
+  const modules =
+    enabledModules === undefined
+      ? getActiveEdition().enabled_modules
+      : enabledModules === null
+        ? null
+        : enabledModules;
+
+  if (modules === null) {
+    // 全开：仍可按 edition 收一刀；edition default 也是全开
+    const editionMods = getActiveEdition().enabled_modules;
+    return filterByPrefixes(nodes, prefixesForModules(editionMods));
+  }
+
+  return filterByPrefixes(nodes, prefixesForModules(modules));
+}
+
+function filterByPrefixes(nodes: MenuNode[], allowed: string[]): MenuNode[] {
+  if (!allowed.length) return [];
 
   const walk = (list: MenuNode[]): MenuNode[] => {
     const out: MenuNode[] = [];
@@ -46,4 +69,17 @@ export function filterMenusByEdition(nodes: MenuNode[]): MenuNode[] {
     return out;
   };
   return walk(nodes);
+}
+
+/** @deprecated 使用 filterMenusByAccess */
+export function filterMenusByEdition(nodes: MenuNode[]): MenuNode[] {
+  return filterMenusByAccess(nodes);
+}
+
+export function isModuleAllowedForUser(
+  moduleId: string,
+  enabledModules?: string[] | null,
+): boolean {
+  if (enabledModules == null) return true;
+  return enabledModules.includes(moduleId);
 }

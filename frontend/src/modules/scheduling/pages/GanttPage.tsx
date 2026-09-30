@@ -22,8 +22,11 @@ import {
   FullscreenOutlined,
   MinusOutlined,
   PlusOutlined,
+  RedoOutlined,
+  ReloadOutlined,
   RightOutlined,
   SwapOutlined,
+  UndoOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
 import type { Dayjs } from "dayjs";
@@ -56,6 +59,8 @@ import {
   type ImpactPreview,
   type OperationItem,
 } from "@/modules/scheduling/api/scheduling";
+import OrderDetailDrawer from "@/modules/scheduling/pages/OrderDetailDrawer";
+import FleetStatsDrawer from "@/modules/scheduling/pages/FleetStatsDrawer";
 import { KpiRow } from "@/components/blocks";
 import { DataTable, DeleteAction, PageHeader, StatusTag } from "@/components/kit";
 import { useMutation } from "@/hooks/useMutation";
@@ -68,6 +73,448 @@ function formatDateLabel(iso?: string | null) {
 
 function activeBusyHints(op?: OperationItem | null) {
   return (op?.busy_hints ?? []).filter((h) => !h.acknowledged);
+}
+
+type PlanDayCell = { date: string; person_id?: string | null };
+type PlanSegPayload = {
+  id?: string;
+  person_id?: string | null;
+  start: string;
+  end: string;
+};
+
+/** 把工序计划展开为日历天（含各段责任人）。 */
+function expandOpPlanDays(op: OperationItem): PlanDayCell[] {
+  const segs = (op.plan_segments ?? []).filter((s) => s.start);
+  if (segs.length) {
+    const out: PlanDayCell[] = [];
+    for (const s of segs) {
+      let cur = dayjs(s.start.slice(0, 10));
+      const end = dayjs((s.end || s.start).slice(0, 10));
+      while (cur.isBefore(end, "day") || cur.isSame(end, "day")) {
+        out.push({
+          date: cur.format("YYYY-MM-DD"),
+          person_id: s.person_id ?? null,
+        });
+        cur = cur.add(1, "day");
+      }
+    }
+    return out;
+  }
+  const start = op.plan_start?.slice(0, 10);
+  if (!start) return [];
+  const end = (op.plan_end || op.plan_start || start).slice(0, 10);
+  const out: PlanDayCell[] = [];
+  let cur = dayjs(start);
+  const endD = dayjs(end);
+  const pid = op.assignee_id ?? op.assignee_ids?.[0] ?? null;
+  while (cur.isBefore(endD, "day") || cur.isSame(endD, "day")) {
+    out.push({ date: cur.format("YYYY-MM-DD"), person_id: pid });
+    cur = cur.add(1, "day");
+  }
+  return out;
+}
+
+/** 连续同人日合并为 plan_segments。 */
+function compressDaysToSegments(days: PlanDayCell[]): PlanSegPayload[] {
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const segs: PlanSegPayload[] = [];
+  for (const d of sorted) {
+    const last = segs[segs.length - 1];
+    const pid = d.person_id ?? null;
+    if (
+      last &&
+      (last.person_id ?? null) === pid &&
+      dayjs(last.end).add(1, "day").format("YYYY-MM-DD") === d.date
+    ) {
+      last.end = d.date;
+    } else {
+      segs.push({ start: d.date, end: d.date, person_id: pid });
+    }
+  }
+  return segs;
+}
+
+/** 只挪某一日历天到目标日（其余天不动，连续块会拆开）。 */
+function buildSegmentsAfterMovingDay(
+  op: OperationItem,
+  fromDate: string,
+  toDate: string,
+): PlanSegPayload[] | null {
+  const days = expandOpPlanDays(op);
+  if (!days.some((d) => d.date === fromDate)) return null;
+  if (fromDate === toDate) return compressDaysToSegments(days);
+  const src = days.find((d) => d.date === fromDate);
+  const rest = days.filter((d) => d.date !== fromDate);
+  if (!rest.some((d) => d.date === toDate)) {
+    rest.push({ date: toDate, person_id: src?.person_id ?? null });
+  }
+  return compressDaysToSegments(rest);
+}
+
+/**
+ * 左右拉宽某一连续 run（bar_start~bar_end）。
+ * 左缘不得早于今天；右缘可拉到更远的未来。
+ */
+function buildAfterBarResize(
+  op: OperationItem,
+  edge: "left" | "right",
+  runStart: string,
+  runEnd: string,
+  targetDate: string,
+  today: string,
+): {
+  plan_start: string;
+  duration_days: number;
+  plan_segments?: PlanSegPayload[];
+} | null {
+  const preview = previewResizeRange(edge, runStart, runEnd, targetDate, today);
+  if (!preview) return null;
+  if (preview.start === runStart && preview.end === runEnd) return null;
+
+  const newStart = preview.start;
+  const newEnd = preview.end;
+  const duration = dayjs(newEnd).diff(dayjs(newStart), "day") + 1;
+  const segs = (op.plan_segments ?? []).filter((s) => s.start);
+  if (!segs.length) {
+    return { plan_start: newStart, duration_days: duration };
+  }
+
+  const days = expandOpPlanDays(op);
+  const outside = days.filter((d) => d.date < runStart || d.date > runEnd);
+  const pid =
+    days.find((d) => d.date >= runStart && d.date <= runEnd)?.person_id ?? null;
+  const runDays: PlanDayCell[] = [];
+  let cur = dayjs(newStart);
+  const endD = dayjs(newEnd);
+  while (cur.isBefore(endD, "day") || cur.isSame(endD, "day")) {
+    runDays.push({ date: cur.format("YYYY-MM-DD"), person_id: pid });
+    cur = cur.add(1, "day");
+  }
+  const merged = compressDaysToSegments([...outside, ...runDays]);
+  const planStart = merged.map((s) => s.start).sort()[0] || newStart;
+  return {
+    plan_start: planStart,
+    duration_days: merged.reduce(
+      (n, s) => n + dayjs(s.end).diff(dayjs(s.start), "day") + 1,
+      0,
+    ),
+    plan_segments: merged,
+  };
+}
+
+/** 拉伸过程中的预览起止（与正式提交同一套钳制规则）。 */
+function previewResizeRange(
+  edge: "left" | "right",
+  runStart: string,
+  runEnd: string,
+  targetDate: string,
+  today: string,
+): { start: string; end: string } | null {
+  let newStart = runStart;
+  let newEnd = runEnd;
+  if (edge === "left") {
+    if (runStart < today) return { start: runStart, end: runEnd };
+    if (targetDate < today) {
+      if (runStart <= today) return { start: runStart, end: runEnd };
+      newStart = today;
+    } else {
+      newStart = targetDate;
+    }
+    if (newStart > runEnd) newStart = runEnd;
+  } else {
+    newEnd = targetDate < runStart ? runStart : targetDate;
+  }
+  return { start: newStart, end: newEnd };
+}
+
+function shortDate(iso?: string | null) {
+  if (!iso) return "-";
+  return iso.slice(5, 10);
+}
+
+function orderRollupStatus(ops: OperationItem[]) {
+  if (!ops.length) return "未排产";
+  if (ops.every((o) => o.status === "done")) return "已完成";
+  if (ops.some((o) => o.status === "exception")) return "异常";
+  if (ops.some((o) => o.status === "running" || o.status === "paused")) return "进行中";
+  if (ops.some((o) => o.plan_start)) return "未开始";
+  return "未开始";
+}
+
+type EffortLine = { name: string; hours: number; days: number };
+
+function personNameMap(persons?: Array<{ id: string; name: string }>) {
+  const map = new Map<string, string>();
+  for (const p of persons ?? []) map.set(p.id, p.name);
+  return map;
+}
+
+/** 某日色块上应显示的责任人（优先看当天命中的时间段）。 */
+function dayAssigneeNames(
+  op: OperationItem,
+  dateIso: string,
+  nameById: Map<string, string>,
+): string[] {
+  const segs = (op.plan_segments ?? []).filter((s) => s.start);
+  if (segs.length) {
+    const names: string[] = [];
+    for (const s of segs) {
+      const a = s.start.slice(0, 10);
+      const b = (s.end || s.start).slice(0, 10);
+      if (dateIso < a || dateIso > b) continue;
+      if (s.person_id) {
+        const n = nameById.get(s.person_id) || s.person_id;
+        if (!names.includes(n)) names.push(n);
+      } else if (op.assignee_names?.length) {
+        for (const n of op.assignee_names) if (!names.includes(n)) names.push(n);
+      } else if (op.assignee_name && !names.includes(op.assignee_name)) {
+        names.push(op.assignee_name);
+      }
+    }
+    if (names.length) return names;
+  }
+  if (op.assignee_names?.length) return [...op.assignee_names];
+  if (op.assignee_name) return [op.assignee_name];
+  return [];
+}
+
+function planEffortByPerson(
+  op: OperationItem,
+  nameById: Map<string, string>,
+): EffortLine[] {
+  const hpd = op.hours_per_day ?? 8;
+  const segs = (op.plan_segments ?? []).filter((s) => s.start);
+  if (segs.length) {
+    const daysByKey = new Map<string, number>();
+    for (const s of segs) {
+      const days = dayjs((s.end || s.start).slice(0, 10)).diff(dayjs(s.start.slice(0, 10)), "day") + 1;
+      const key = s.person_id || "__shared__";
+      daysByKey.set(key, (daysByKey.get(key) || 0) + days);
+    }
+    if (daysByKey.size === 1 && daysByKey.has("__shared__")) {
+      const days = daysByKey.get("__shared__") || 1;
+      const label =
+        (op.assignee_names?.length ? op.assignee_names.join("、") : op.assignee_name) ||
+        "未派人";
+      return [{ name: label, hours: Math.round(days * hpd * 10) / 10, days }];
+    }
+    const out: EffortLine[] = [];
+    for (const [key, days] of daysByKey) {
+      if (key === "__shared__") {
+        const label =
+          (op.assignee_names?.length ? op.assignee_names.join("、") : op.assignee_name) ||
+          "未派人";
+        out.push({ name: label, hours: Math.round(days * hpd * 10) / 10, days });
+        continue;
+      }
+      out.push({
+        name: nameById.get(key) || key,
+        hours: Math.round(days * hpd * 10) / 10,
+        days,
+      });
+    }
+    return out;
+  }
+  const days = Math.max(1, op.segment_day_sum || op.duration_days || 1);
+  const hours = op.planned_hours || days * hpd;
+  const names = op.assignee_names?.length
+    ? op.assignee_names
+    : op.assignee_name
+      ? [op.assignee_name]
+      : ["未派人"];
+  if (names.length === 1) {
+    return [{ name: names[0], hours: Math.round(hours * 10) / 10, days }];
+  }
+  return names.map((n) => ({
+    name: n,
+    hours: Math.round(days * hpd * 10) / 10,
+    days,
+  }));
+}
+
+function actualEffortByPerson(op: OperationItem): EffortLine[] {
+  const a0 = op.actual_start?.slice(0, 10);
+  if (!a0) return [];
+  const a1 =
+    op.actual_end?.slice(0, 10) ||
+    (op.status === "running" || op.status === "paused" ? TODAY_ISO() : a0);
+  const days = Math.max(1, dayjs(a1).diff(dayjs(a0), "day") + 1);
+  const hpd = op.hours_per_day ?? 8;
+  const names = op.assignee_names?.length
+    ? op.assignee_names
+    : op.assignee_name
+      ? [op.assignee_name]
+      : ["未派人"];
+  return names.map((n) => ({
+    name: n,
+    hours: Math.round(days * hpd * 10) / 10,
+    days,
+  }));
+}
+
+function EffortSection({
+  title,
+  blocks,
+}: {
+  title: string;
+  blocks: Array<{ name: string; lines: EffortLine[] }>;
+}) {
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ fontWeight: 600, marginBottom: 2 }}>{title}</div>
+      {blocks.length ? (
+        blocks.map((b) => (
+          <div key={`${title}-${b.name}`} style={{ marginBottom: 4 }}>
+            <div style={{ color: "rgba(255,255,255,0.88)" }}>{b.name}</div>
+            {b.lines.map((l, i) => (
+              <div
+                key={`${b.name}-${l.name}-${i}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto auto",
+                  columnGap: 12,
+                  paddingLeft: 10,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{l.name}</span>
+                <span style={{ textAlign: "right", minWidth: 36 }}>{l.hours}h</span>
+                <span style={{ textAlign: "right", minWidth: 28 }}>{l.days}天</span>
+              </div>
+            ))}
+          </div>
+        ))
+      ) : (
+        <div style={{ paddingLeft: 10 }}>—</div>
+      )}
+    </div>
+  );
+}
+
+function buildOrderHoverTip(
+  row: GanttOrderRow,
+  opts: {
+    nameById: Map<string, string>;
+    conflictCount: number;
+  },
+): ReactNode {
+  const ops = [...(row.operations || [])].sort((a, b) => (a.seq || 0) - (b.seq || 0));
+  const status = orderRollupStatus(ops);
+  const source = row.source_type_label || (row.source_type === "customer" ? "客户订单" : "内部生产");
+  const title = [row.order_code, source].filter(Boolean).join(" · ");
+  const subtitle = [row.work_order_name || row.work_order_code, status]
+    .filter(Boolean)
+    .join(" · ");
+
+  const remaining =
+    ops.filter((o) => o.status !== "done").length + (row.unreleased_count || 0);
+  const planStart = row.plan_start || ops.map((o) => o.plan_start).filter(Boolean).sort()[0];
+  const planEnd =
+    row.estimated_end ||
+    [...ops.map((o) => o.plan_end || o.plan_start).filter(Boolean)].sort().slice(-1)[0];
+  const plannedHours = ops.reduce(
+    (n, o) =>
+      n +
+      (o.planned_hours ||
+        (o.segment_day_sum || o.duration_days || 0) * (o.hours_per_day ?? 8)),
+    0,
+  );
+  const hpdHint = ops[0]?.hours_per_day ?? 8;
+
+  const planBlocks = ops
+    .filter((o) => o.plan_start || (o.plan_segments && o.plan_segments.length))
+    .map((o) => ({
+      name: o.name,
+      lines: planEffortByPerson(o, opts.nameById),
+    }));
+
+  const actualBlocks = ops
+    .map((o) => ({ name: o.name, lines: actualEffortByPerson(o) }))
+    .filter((x) => x.lines.length);
+
+  let progStart: string | undefined;
+  let progEnd: string | undefined;
+  for (const o of ops) {
+    const a0 = o.actual_start?.slice(0, 10);
+    if (!a0) continue;
+    const a1 =
+      o.actual_end?.slice(0, 10) ||
+      (o.status === "running" || o.status === "paused" ? TODAY_ISO() : a0);
+    if (!progStart || a0 < progStart) progStart = a0;
+    if (!progEnd || a1 > progEnd) progEnd = a1;
+  }
+  // 进度工时：按工序实际窗×日工时，避免多人重复累加
+  const actualHours = ops.reduce((n, o) => {
+    const a0 = o.actual_start?.slice(0, 10);
+    if (!a0) return n;
+    const a1 =
+      o.actual_end?.slice(0, 10) ||
+      (o.status === "running" || o.status === "paused" ? TODAY_ISO() : a0);
+    const days = Math.max(1, dayjs(a1).diff(dayjs(a0), "day") + 1);
+    return n + days * (o.hours_per_day ?? 8);
+  }, 0);
+
+  const gap = ops.reduce((n, o) => n + (o.staffing_gap || 0), 0);
+  const pct =
+    plannedHours > 0 ? Math.min(100, Math.round((actualHours / plannedHours) * 100)) : 0;
+
+  return (
+    <div style={{ lineHeight: 1.55, maxWidth: 320, fontSize: 12 }}>
+      <div style={{ fontSize: 13 }}>
+        <b>{title}</b>
+      </div>
+      <div>{subtitle}</div>
+      <div style={{ marginTop: 4 }}>
+        交期 {shortDate(row.due_date)} · 剩余 {remaining} 道工序
+      </div>
+      <div>
+        计划 {shortDate(planStart)}～{shortDate(planEnd)} · 共{" "}
+        {Math.round(plannedHours * 10) / 10}h（日 {hpdHint}h）
+      </div>
+      <EffortSection title="计划人员" blocks={planBlocks} />
+      <EffortSection title="实际" blocks={actualBlocks} />
+      <div style={{ marginTop: 6 }}>
+        进度{" "}
+        {progStart
+          ? `${shortDate(progStart)}～${shortDate(progEnd)} · ${Math.round(actualHours * 10) / 10}h / ${Math.round(plannedHours * 10) / 10}h（${pct}%）`
+          : `— · 0h / ${Math.round(plannedHours * 10) / 10}h`}
+      </div>
+      <div>
+        缺编 {gap} / 冲突 {opts.conflictCount}
+      </div>
+    </div>
+  );
+}
+
+function buildDayCellTip(
+  op: OperationItem,
+  dateIso: string,
+  nameById: Map<string, string>,
+  kind: "plan" | "actual" = "plan",
+  showDragHint = false,
+): ReactNode {
+  const names = dayAssigneeNames(op, dateIso, nameById);
+  const who = names.length ? names.join("、") : "未派人";
+  const slot =
+    kind === "actual"
+      ? "实绩"
+      : op.shift_time_label || op.slot_label || "全天";
+  return (
+    <div style={{ lineHeight: 1.7 }}>
+      <div>
+        <b>{op.name}</b> · {who}
+      </div>
+      <div>
+        {shortDate(dateIso)} · {slot}
+      </div>
+      {showDragHint ? (
+        <div style={{ marginTop: 4, opacity: 0.85, fontSize: 12 }}>
+          拖中间改期；左右边缘拉宽/缩短
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /** 按计划区间（含多段）给工序固定泳道；段间隙可被其他工序占用。 */
@@ -169,7 +616,31 @@ export default function GanttPage() {
   });
   const [searchParams, setSearchParams] = useSearchParams();
   const [sourceFilter, setSourceFilter] = useState<string | undefined>();
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragState, setDragState] = useState<{
+    opId: string;
+    fromDate: string;
+  } | null>(null);
+  const [dragChoice, setDragChoice] = useState<{
+    opId: string;
+    opName: string;
+    fromDate: string;
+    toDate: string;
+    dayCount: number;
+  } | null>(null);
+  const [detailRow, setDetailRow] = useState<GanttOrderRow | null>(null);
+  const [fleetStatsOpen, setFleetStatsOpen] = useState(false);
+  const [resizeState, setResizeState] = useState<{
+    opId: string;
+    edge: "left" | "right";
+    runStart: string;
+    runEnd: string;
+    hoverDate: string;
+  } | null>(null);
+  const resizeStateRef = useRef(resizeState);
+  resizeStateRef.current = resizeState;
+  const suppressBarDragRef = useRef(false);
+  const dataRef = useRef(data);
+  dataRef.current = data;
   const [editing, setEditing] = useState<OperationItem | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [impact, setImpact] = useState<ImpactPreview | null>(null);
@@ -230,7 +701,7 @@ export default function GanttPage() {
       root.querySelector<HTMLElement>(".ant-table-body") ||
       root.querySelector<HTMLElement>(".ant-table-content");
     if (!body) return;
-    const leftCol = 168;
+    const leftCol = 248 + 96;
     const colW = 128;
     body.scrollLeft = Math.max(0, leftCol + idx * colW - colW * 2);
   };
@@ -321,6 +792,11 @@ export default function GanttPage() {
     });
   }, [data?.rows, sourceFilter, expandedOrders]);
 
+  /** 汇总统计用：全部计划行（抽屉内再筛） */
+  const statsPlanRows = useMemo(() => {
+    return (data?.rows ?? []).filter((r) => r.row_kind !== "actual");
+  }, [data?.rows]);
+
   /** 订单斑马序号：同单一色，便于远看区分 */
   const orderStripeIndex = useMemo(() => {
     const map = new Map<string, number>();
@@ -342,6 +818,18 @@ export default function GanttPage() {
     }
     return map;
   }, [data?.rows]);
+
+  const personNameById = useMemo(() => personNameMap(data?.persons), [data?.persons]);
+
+  const conflictCountByOrder = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of data?.conflicts ?? []) {
+      const code = c.order_code;
+      if (!code) continue;
+      map.set(code, (map.get(code) || 0) + 1);
+    }
+    return map;
+  }, [data?.conflicts]);
 
   const openImpact = (preview: ImpactPreview, apply: () => Promise<void>) => {
     setImpact(preview);
@@ -439,37 +927,228 @@ export default function GanttPage() {
 
   const history = data?.history;
 
-  const onDropToDate = async (opId: string, dateIso: string) => {
+  const applyWholeShift = async (op: OperationItem, fromDate: string, toDate: string) => {
     const today = TODAY_ISO();
-    if (dateIso < today) {
+    const oldStart = (op.plan_start || fromDate).slice(0, 10);
+    if (oldStart < today) {
+      message.warning(
+        "该工序已在今天之前开始，不可整段改开始日；可拖未来日并在弹窗选「只挪本日」",
+      );
+      return;
+    }
+    const delta = dayjs(toDate).diff(dayjs(fromDate), "day");
+    if (delta === 0) return;
+    const newStart = dayjs(oldStart).add(delta, "day").format("YYYY-MM-DD");
+    if (newStart < today) {
+      message.warning("整段平移后会落到今天之前，已取消");
+      return;
+    }
+    const preview = await previewMoveGanttTask(op.id, {
+      plan_start: newStart,
+      cascade: true,
+    });
+    openImpact(preview, async () => {
+      const result = await moveGanttTask(op.id, { plan_start: newStart, cascade: true });
+      const active = activeBusyHints(result);
+      if (active.length) {
+        message.warning(active.map((h) => h.message).join("；"));
+      } else {
+        message.success(
+          delta > 0
+            ? `整段后移 ${delta} 天，后置工序已顺延`
+            : `整段前移 ${-delta} 天，后置工序已顺延`,
+        );
+      }
+      await refresh();
+    });
+  };
+
+  const applySingleDayMove = async (
+    op: OperationItem,
+    fromDate: string,
+    toDate: string,
+  ) => {
+    const today = TODAY_ISO();
+    if (fromDate < today) {
+      message.warning("历史日已冻结，不能拆开挪走");
+      return;
+    }
+    if (toDate < today) {
+      message.warning("不能挪到今天之前");
+      return;
+    }
+    const segs = buildSegmentsAfterMovingDay(op, fromDate, toDate);
+    if (!segs?.length) {
+      message.warning("无法拆出该日，请点开工序手动改时间段");
+      return;
+    }
+    const planStart = segs.map((s) => s.start).sort()[0];
+    const preview = await previewMoveGanttTask(op.id, {
+      plan_start: planStart,
+      plan_segments: segs,
+      cascade: true,
+    });
+    openImpact(preview, async () => {
+      const result = await moveGanttTask(op.id, {
+        plan_start: planStart,
+        plan_segments: segs,
+        cascade: true,
+      });
+      const active = activeBusyHints(result);
+      if (active.length) {
+        message.warning(active.map((h) => h.message).join("；"));
+      } else {
+        message.success(
+          fromDate === toDate
+            ? "日期未变"
+            : `已把 ${fromDate.slice(5)} 拆开挪到 ${toDate.slice(5)}`,
+        );
+      }
+      await refresh();
+    });
+  };
+
+  const onDropToDate = async (opId: string, toDate: string, fromDate: string) => {
+    const today = TODAY_ISO();
+    if (toDate < today) {
       message.warning("历史日期已冻结，不能拖到今天之前");
-      setDraggingId(null);
+      setDragState(null);
       return;
     }
     const op = data?.tasks?.find((t) => t.id === opId);
-    if (op?.plan_start && op.plan_start.slice(0, 10) < today) {
-      message.warning("该工序已在今天之前开始，不可改开始日；可点开改派人员");
-      setDraggingId(null);
+    if (!op) {
+      setDragState(null);
+      return;
+    }
+    const days = expandOpPlanDays(op);
+    const dayCount = days.length;
+    try {
+      if (dayCount <= 1 || fromDate === toDate) {
+        await applyWholeShift(op, fromDate || op.plan_start?.slice(0, 10) || toDate, toDate);
+      } else {
+        // 连续多天：先问整段一起移，还是只挪抓取日
+        setDragChoice({
+          opId,
+          opName: op.name,
+          fromDate,
+          toDate,
+          dayCount,
+        });
+      }
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "预览失败");
+    } finally {
+      setDragState(null);
+    }
+  };
+
+  const confirmDragChoice = async (mode: "whole" | "day") => {
+    if (!dragChoice) return;
+    const op = data?.tasks?.find((t) => t.id === dragChoice.opId);
+    const choice = dragChoice;
+    setDragChoice(null);
+    if (!op) return;
+    try {
+      if (mode === "whole") {
+        await applyWholeShift(op, choice.fromDate, choice.toDate);
+      } else {
+        await applySingleDayMove(op, choice.fromDate, choice.toDate);
+      }
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "预览失败");
+    }
+  };
+
+  const finishBarResize = async () => {
+    const st = resizeStateRef.current;
+    setResizeState(null);
+    suppressBarDragRef.current = false;
+    if (!st) return;
+    const target = (st.hoverDate || "").slice(0, 10);
+    if (!target) return;
+    const op = dataRef.current?.tasks?.find((t) => t.id === st.opId);
+    if (!op) return;
+    const today = TODAY_ISO();
+    const payload = buildAfterBarResize(
+      op,
+      st.edge,
+      st.runStart,
+      st.runEnd,
+      target,
+      today,
+    );
+    if (!payload) {
+      if (st.edge === "left" && target < today) {
+        message.warning("左缘不能拉到今天之前");
+      }
       return;
     }
     try {
-      const preview = await previewMoveGanttTask(opId, { plan_start: dateIso, cascade: true });
+      const body = {
+        plan_start: payload.plan_start,
+        duration_days: payload.duration_days,
+        ...(payload.plan_segments ? { plan_segments: payload.plan_segments } : {}),
+        cascade: true,
+      };
+      const preview = await previewMoveGanttTask(op.id, body);
       openImpact(preview, async () => {
-        const result = await moveGanttTask(opId, { plan_start: dateIso, cascade: true });
+        const result = await moveGanttTask(op.id, body);
         const active = activeBusyHints(result);
         if (active.length) {
           message.warning(active.map((h) => h.message).join("；"));
         } else {
-          message.success("已调整开始日；跨天耗时保留，后置工序已顺延");
+          const endIso = dayjs(payload.plan_start)
+            .add(payload.duration_days - 1, "day")
+            .format("YYYY-MM-DD");
+          message.success(`已调整为 ${payload.plan_start} ~ ${endIso}（${payload.duration_days} 天）`);
         }
         await refresh();
       });
     } catch (e) {
       message.error(e instanceof Error ? e.message : "预览失败");
-    } finally {
-      setDraggingId(null);
     }
   };
+
+  const startBarResize = (
+    op: OperationItem,
+    edge: "left" | "right",
+    e: React.PointerEvent,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    suppressBarDragRef.current = true;
+    const runStart = (op.bar_start || op.plan_start || "").slice(0, 10);
+    const runEnd = (op.bar_end || op.plan_end || runStart).slice(0, 10);
+    if (!runStart) return;
+    setDragState(null);
+    setResizeState({
+      opId: op.id,
+      edge,
+      runStart,
+      runEnd,
+      hoverDate: edge === "left" ? runStart : runEnd,
+    });
+  };
+
+  useEffect(() => {
+    if (!resizeState) return;
+    const onUp = () => {
+      void finishBarResize();
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        setResizeState(null);
+        suppressBarDragRef.current = false;
+      }
+    };
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!resizeState]);
 
   const openScheduleForOrder = (orderId: string) => {
     addForm.setFieldsValue({
@@ -707,35 +1386,13 @@ export default function GanttPage() {
       title: "订单",
       key: "meta",
       fixed: "left" as const,
-      width: 168,
+      width: 248,
       render: (_: unknown, row: GanttOrderRow) => {
         const isActual = row.row_kind === "actual";
-        const tip = (
-          <div style={{ lineHeight: 1.7 }}>
-            <div>
-              <b>{row.order_code}</b> · {row.order_name}
-            </div>
-            <div>
-              {row.source_type_label}
-              {row.customer_name ? ` · ${row.customer_name}` : ""}
-            </div>
-            <div>产品：{row.product || "-"}</div>
-            <div>工单：{row.work_order_code || "-"}</div>
-            {row.wo_kind_labels?.length ? (
-              <div>工单类型：{row.wo_kind_labels.join("、")}</div>
-            ) : null}
-            <div>开始时间：{formatDateLabel(row.plan_start)}</div>
-            <div>
-              耗时：{row.duration_days ?? "-"} 工序天
-              {row.span_days ? `（跨度 ${row.span_days} 天）` : ""}
-            </div>
-            <div>订单交付时间：{formatDateLabel(row.due_date)}</div>
-            <div>预计交付时间：{formatDateLabel(row.estimated_end)}</div>
-            {(row.unreleased_count || 0) > 0 ? (
-              <div>待释放工序：{row.unreleased_count} 道（下周期再排）</div>
-            ) : null}
-          </div>
-        );
+        const tip = buildOrderHoverTip(row, {
+          nameById: personNameById,
+          conflictCount: conflictCountByOrder.get(row.order_code) || 0,
+        });
         const expanded = !!(row.order_id && expandedOrders.has(row.order_id));
         const stripe = orderStripeIndex.get(row.order_id || "") ?? 0;
         const accent = stripe % 2 === 0 ? "#2563eb" : "#0f766e";
@@ -754,7 +1411,8 @@ export default function GanttPage() {
             </div>
           );
         }
-        const titleText = [row.order_code, row.order_name].filter(Boolean).join(" · ");
+        const titleText = row.order_code || row.order_name || "-";
+        const subText = row.work_order_name || row.work_order_code || "";
         return (
           <div
             style={{
@@ -784,36 +1442,78 @@ export default function GanttPage() {
                 style={{
                   flex: 1,
                   minWidth: 0,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  fontWeight: 700,
-                  fontSize: 13,
                   cursor: "default",
+                  lineHeight: 1.25,
+                  paddingRight: 4,
                 }}
               >
-                {row.is_insert_row ? (
-                  <Tag color="red" style={{ marginInlineEnd: 4 }}>
-                    插
-                  </Tag>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 13,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {row.is_insert_row ? (
+                    <Tag color="red" style={{ marginInlineEnd: 4 }}>
+                      插
+                    </Tag>
+                  ) : null}
+                  {titleText}
+                </div>
+                {subText ? (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#718096",
+                      fontWeight: 400,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      marginTop: 1,
+                    }}
+                  >
+                    {subText}
+                  </div>
                 ) : null}
-                {titleText}
               </div>
             </Tooltip>
-            {expanded && row.order_id ? (
-              <div onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }}>
-                <DeleteAction
-                  title="删除 / 作废该订单？"
-                  content="无完工实绩则整单删除（含工单与工序）；若有进行中或已完工则作废并撤出甘特，实绩保留。"
-                  successMessage={false}
-                  onConfirm={() => doRemoveOrder(row.order_id!)}
-                  buttonProps={{ size: "small", type: "link" }}
-                >
-                  删
-                </DeleteAction>
-              </div>
-            ) : null}
           </div>
+        );
+      },
+    },
+    {
+      title: "操作",
+      key: "actions",
+      fixed: "left" as const,
+      width: 96,
+      render: (_: unknown, row: GanttOrderRow) => {
+        if (row.row_kind === "actual" || row.editable === false) {
+          return <span style={{ color: "#a0aec0", fontSize: 12 }}>—</span>;
+        }
+        if (!row.order_id) return null;
+        return (
+          <Space size={0} wrap>
+            <Button
+              type="link"
+              size="small"
+              style={{ paddingInline: 4 }}
+              onClick={() => setDetailRow(row)}
+            >
+              详情
+            </Button>
+            <DeleteAction
+              title="删除 / 作废该订单？"
+              content="无完工实绩则整单删除（含工单与工序）；若有进行中或已完工则作废并撤出甘特，实绩保留。"
+              successMessage={false}
+              onConfirm={() => doRemoveOrder(row.order_id!)}
+              buttonProps={{ size: "small", type: "link", style: { paddingInline: 4 } }}
+            >
+              删除
+            </DeleteAction>
+          </Space>
         );
       },
     },
@@ -916,19 +1616,12 @@ export default function GanttPage() {
                   const seg = op.segment || "single";
                   const isStart = seg === "start" || seg === "single";
                   const isEnd = seg === "end" || seg === "single";
-                  const tip = (
-                    <div style={{ lineHeight: 1.7 }}>
-                      <div>
-                        <b>{op.name}</b>
-                        {line.kind === "plan" ? " · 计划" : " · 实绩"}
-                      </div>
-                      <div>
-                        {formatDateLabel(op.bar_start || op.plan_start)} ~{" "}
-                        {formatDateLabel(op.bar_end || op.plan_end)}
-                      </div>
-                      <div>责任人：{op.assignee_name || "未派人"}</div>
-                      <div>点击展开看工序块</div>
-                    </div>
+                  const tip = buildDayCellTip(
+                    op,
+                    d,
+                    personNameById,
+                    line.kind,
+                    false,
                   );
                   return (
                     <Tooltip
@@ -974,29 +1667,68 @@ export default function GanttPage() {
             laneCount: Math.max(cells.length, 1),
           };
           const stackH = Math.max(1, laneCount) * BAR_H + Math.max(0, laneCount - 1) * LANE_GAP;
+          // 仅当本行含正在拉伸的工序时，才接收目标日（不影响其它行）
+          const rowHasResizeOp =
+            !!resizeState &&
+            !isActualRow &&
+            Object.values(row.cells || {})
+              .flat()
+              .some((op) => op.id === resizeState.opId);
+          const resizePreview =
+            rowHasResizeOp && resizeState
+              ? previewResizeRange(
+                  resizeState.edge,
+                  resizeState.runStart,
+                  resizeState.runEnd,
+                  resizeState.hoverDate,
+                  TODAY_ISO(),
+                )
+              : null;
+          const inOrigRun =
+            !!resizeState && d >= resizeState.runStart && d <= resizeState.runEnd;
+          const inPreviewRun =
+            !!resizePreview && d >= resizePreview.start && d <= resizePreview.end;
+          // 拉长到空白日：本格没有该工序 → 画新增虚影
+          const needAddGhost =
+            !!resizeState &&
+            rowHasResizeOp &&
+            inPreviewRun &&
+            !inOrigRun &&
+            !cells.some((op) => op.id === resizeState.opId);
+          const resizeLane =
+            resizeState && rowHasResizeOp ? (laneOf.get(resizeState.opId) ?? 0) : 0;
+          const ghostColor = "rgba(37,99,235,0.5)";
+          const showStack = cells.length > 0 || needAddGhost;
           return (
             <div
               style={{
                 position: "relative",
-                minHeight: cells.length ? stackH + 8 : 40,
+                minHeight: showStack ? stackH + 8 : 40,
                 padding: isOrderDue ? `0 ${DUE_GAP + 2}px 0 2px` : "0 2px",
                 background: isActualRow ? "rgba(148,163,184,0.08)" : undefined,
               }}
               onDragOver={(e) => {
                 if (!isActualRow && !isPastCol) e.preventDefault();
               }}
+              onPointerEnter={() => {
+                if (!resizeState || isActualRow || !rowHasResizeOp) return;
+                if (resizeState.edge === "left" && d < TODAY_ISO()) return;
+                setResizeState((s) => (s ? { ...s, hoverDate: d } : s));
+              }}
               onDrop={() => {
                 if (isActualRow) {
                   message.warning("实绩行不可改，请调整上方计划行");
-                  setDraggingId(null);
+                  setDragState(null);
                   return;
                 }
                 if (isPastCol) {
                   message.warning("历史日期已冻结");
-                  setDraggingId(null);
+                  setDragState(null);
                   return;
                 }
-                if (draggingId) void onDropToDate(draggingId, d);
+                if (dragState) {
+                  void onDropToDate(dragState.opId, d, dragState.fromDate);
+                }
               }}
             >
               {isOrderDue && !isActualRow ? (
@@ -1028,8 +1760,26 @@ export default function GanttPage() {
                   </div>
                 </Tooltip>
               ) : null}
-              {cells.length ? (
+              {showStack ? (
                 <div style={{ position: "relative", height: stackH }}>
+                  {needAddGhost ? (
+                    <div
+                      title="将占用（松手后确认）"
+                      style={{
+                        position: "absolute",
+                        top: resizeLane * (BAR_H + LANE_GAP),
+                        left: 0,
+                        right: 0,
+                        height: BAR_H,
+                        background: ghostColor,
+                        border: "1px dashed rgba(255,255,255,0.9)",
+                        borderRadius: 6,
+                        boxSizing: "border-box",
+                        pointerEvents: "none",
+                        zIndex: 2,
+                      }}
+                    />
+                  ) : null}
                   {cells.map((op) => {
                     const seg = op.segment || "single";
                     const isStart = seg === "start" || seg === "single";
@@ -1091,18 +1841,60 @@ export default function GanttPage() {
                     const canDrag =
                       !isActualRow &&
                       op.status !== "done" &&
-                      !(op.plan_start && op.plan_start.slice(0, 10) < TODAY_ISO());
+                      !(
+                        op.plan_start &&
+                        op.plan_start.slice(0, 10) < TODAY_ISO() &&
+                        d < TODAY_ISO()
+                      );
+                    const runStart = (op.bar_start || op.plan_start || "").slice(0, 10);
+                    const runEnd = (op.bar_end || op.plan_end || runStart).slice(0, 10);
+                    const todayIso = TODAY_ISO();
+                    // 左缘已进入历史：不能再改开始日；贴今天时仍可往右收，但不能再往左
+                    const canResizeLeft =
+                      !isActualRow && op.status !== "done" && !!runStart && runStart >= todayIso;
+                    const canResizeRight =
+                      !isActualRow && op.status !== "done" && !!runEnd;
+                    const resizingThis = resizeState?.opId === op.id;
+                    const willRemove =
+                      resizingThis && !!resizePreview && inOrigRun && !inPreviewRun;
                     const needsVariance = !isActualRow && !!op.plan_vs_actual?.needs_action;
+                    const dayTip = buildDayCellTip(
+                      op,
+                      d,
+                      personNameById,
+                      isActualRow ? "actual" : "plan",
+                      !isActualRow && (canDrag || canResizeLeft || canResizeRight),
+                    );
                     return (
-                      <Tooltip key={`${op.id}-${op.bar_start || ""}-${d}`} title={tip}>
+                      <Tooltip
+                        key={`${op.id}-${op.bar_start || ""}-${d}`}
+                        title={
+                          willRemove ? (
+                            <div>将释放（松手后确认）</div>
+                          ) : resizingThis ? (
+                            <div>
+                              横向拉伸中…
+                              {resizeState ? ` 目标 ${resizeState.hoverDate}` : ""}
+                            </div>
+                          ) : (
+                            dayTip
+                          )
+                        }
+                      >
                         <div
-                          draggable={canDrag}
-                          onDragStart={() => {
-                            if (canDrag) setDraggingId(op.id);
+                          draggable={canDrag && !resizeState}
+                          onDragStart={(e) => {
+                            if (suppressBarDragRef.current || resizeState) {
+                              e.preventDefault();
+                              return;
+                            }
+                            if (!canDrag) return;
+                            e.dataTransfer.effectAllowed = "move";
+                            setDragState({ opId: op.id, fromDate: d });
                           }}
-                          onDragEnd={() => setDraggingId(null)}
+                          onDragEnd={() => setDragState(null)}
                           onClick={() => {
-                            if (!isActualRow) openEdit(op);
+                            if (!isActualRow && !resizeState) openEdit(op);
                           }}
                           style={{
                             position: "absolute",
@@ -1112,25 +1904,72 @@ export default function GanttPage() {
                             cursor: canDrag ? "grab" : isActualRow ? "default" : "pointer",
                             height: BAR_H,
                             padding: "0 6px",
-                            background: barColor,
+                            background: willRemove ? ghostColor : barColor,
                             color: "#fff",
                             borderTopLeftRadius: isStart ? 6 : 0,
                             borderBottomLeftRadius: isStart ? 6 : 0,
                             borderTopRightRadius: isEnd || isOrderDue ? 6 : 0,
                             borderBottomRightRadius: isEnd || isOrderDue ? 6 : 0,
-                            border: activeBusyHints(op).length
-                              ? "1px solid #f59e0b"
-                              : needsVariance
-                                ? "1px dashed #fbbf24"
-                                : "none",
+                            border: willRemove
+                              ? "1px dashed rgba(255,255,255,0.9)"
+                              : activeBusyHints(op).length
+                                ? "1px solid #f59e0b"
+                                : needsVariance
+                                  ? "1px dashed #fbbf24"
+                                  : dragState?.opId === op.id
+                                    ? "1px solid #fff"
+                                    : "none",
+                            opacity: dragState?.opId === op.id ? 0.85 : 1,
                             boxSizing: "border-box",
                             display: "flex",
                             flexDirection: "column",
                             justifyContent: "center",
                             overflow: "hidden",
                             zIndex: 1,
+                            pointerEvents: willRemove ? "none" : undefined,
                           }}
                         >
+                          {isStart && canResizeLeft && !willRemove ? (
+                            <div
+                              title="向左拉宽 / 向右缩短（不早于今天）"
+                              onPointerDown={(e) => startBarResize(op, "left", e)}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: 10,
+                                cursor: "ew-resize",
+                                zIndex: 3,
+                                background:
+                                  runStart <= todayIso
+                                    ? "rgba(255,255,255,0.15)"
+                                    : "rgba(255,255,255,0.35)",
+                                borderTopLeftRadius: 6,
+                                borderBottomLeftRadius: 6,
+                              }}
+                            />
+                          ) : null}
+                          {isEnd && canResizeRight && !willRemove ? (
+                            <div
+                              title="向右拉宽 / 向左缩短"
+                              onPointerDown={(e) => startBarResize(op, "right", e)}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                position: "absolute",
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: 10,
+                                cursor: "ew-resize",
+                                zIndex: 3,
+                                background: "rgba(255,255,255,0.35)",
+                                borderTopRightRadius: 6,
+                                borderBottomRightRadius: 6,
+                              }}
+                            />
+                          ) : null}
                           {isStart ? (
                             <>
                               <div
@@ -1141,6 +1980,8 @@ export default function GanttPage() {
                                   whiteSpace: "nowrap",
                                   textOverflow: "ellipsis",
                                   overflow: "hidden",
+                                  paddingLeft: canResizeLeft ? 8 : 0,
+                                  paddingRight: isEnd && canResizeRight ? 8 : 0,
                                 }}
                               >
                                 {op.name}
@@ -1152,15 +1993,19 @@ export default function GanttPage() {
                                   whiteSpace: "nowrap",
                                   textOverflow: "ellipsis",
                                   overflow: "hidden",
+                                  paddingLeft: canResizeLeft ? 8 : 0,
+                                  paddingRight: isEnd && canResizeRight ? 8 : 0,
                                 }}
                               >
                                 {isActualRow
                                   ? "已签字"
-                                  : `${op.segment_day_sum || op.duration_days || 1}天 · ${
-                                      (op.staffing_gap || 0) > 0
-                                        ? `缺${op.staffing_gap}人`
-                                        : op.assignee_name || "未派人"
-                                    }`}
+                                  : willRemove
+                                    ? "将释放"
+                                    : `${op.segment_day_sum || op.duration_days || 1}天 · ${
+                                        (op.staffing_gap || 0) > 0
+                                          ? `缺${op.staffing_gap}人`
+                                          : op.assignee_name || "未派人"
+                                      }`}
                               </div>
                             </>
                           ) : null}
@@ -1188,9 +2033,11 @@ export default function GanttPage() {
             <Tag color="blue">核心页面</Tag>
           </Space>
         }
-        subtitle="每单两行：上计划可调，下实绩签字后写入且只读。宽窄样式后期再收。"
         extra={
           <Space wrap>
+            <Button size="small" type="primary" ghost onClick={() => setFleetStatsOpen(true)}>
+              汇总统计
+            </Button>
             {sandboxActive ? (
               <>
                 <Tag color="orange">试排中</Tag>
@@ -1216,22 +2063,30 @@ export default function GanttPage() {
             >
               从工单排产
             </Button>
-            <Button
-              disabled={!history?.can_undo}
-              loading={undoing}
-              onClick={() => void doUndo()}
-              title={history ? `可回退 ${history.undo_steps}/${history.limit} 步` : "回退"}
+            <Tooltip
+              title={history ? `回退（${history.undo_steps}/${history.limit}）` : "回退"}
             >
-              回退
-            </Button>
-            <Button
-              disabled={!history?.can_redo}
-              loading={redoing}
-              onClick={() => void doRedo()}
-              title={history ? `可前进 ${history.redo_steps}/${history.limit} 步` : "前进"}
+              <span>
+                <Button
+                  icon={<UndoOutlined />}
+                  disabled={!history?.can_undo}
+                  loading={undoing}
+                  onClick={() => void doUndo()}
+                />
+              </span>
+            </Tooltip>
+            <Tooltip
+              title={history ? `前进（${history.redo_steps}/${history.limit}）` : "前进"}
             >
-              前进
-            </Button>
+              <span>
+                <Button
+                  icon={<RedoOutlined />}
+                  disabled={!history?.can_redo}
+                  loading={redoing}
+                  onClick={() => void doRedo()}
+                />
+              </span>
+            </Tooltip>
             <Button loading={replanning} onClick={() => requestReplan()}>
               一键重排
             </Button>
@@ -1244,9 +2099,13 @@ export default function GanttPage() {
             >
               <Button loading={resettingDemo}>恢复演示排产</Button>
             </Popconfirm>
-            <Button onClick={() => void refresh()} loading={loading}>
-              刷新
-            </Button>
+            <Tooltip title="刷新">
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => void refresh()}
+                loading={loading}
+              />
+            </Tooltip>
           </Space>
         }
       />
@@ -1403,7 +2262,10 @@ export default function GanttPage() {
               全部折叠
             </Button>
             <span style={{ fontSize: 12, color: "#718096" }}>
-              {axis?.hint || "折叠：一行看全盘（虚线=计划，实线=实绩）；展开看工序块"}
+              {resizeState
+                ? `拉伸中 → ${resizeState.hoverDate}（松手确认，Esc 取消）`
+                : axis?.hint ||
+                  "展开后：拖中间改期；左右白边拉宽/缩短（左缘不早于今天）"}
             </span>
           </Space>
           <Space>
@@ -1760,6 +2622,59 @@ export default function GanttPage() {
             },
           ]}
         />
+      </Modal>
+
+      <OrderDetailDrawer
+        open={!!detailRow}
+        row={detailRow}
+        nameById={personNameById}
+        onClose={() => setDetailRow(null)}
+      />
+
+      <FleetStatsDrawer
+        open={fleetStatsOpen}
+        planRows={statsPlanRows}
+        conflicts={data?.conflicts ?? []}
+        onClose={() => setFleetStatsOpen(false)}
+        onOpenOrder={(row) => {
+          setFleetStatsOpen(false);
+          setDetailRow(row);
+        }}
+      />
+
+      <Modal
+        title="如何调整这块排产？"
+        open={!!dragChoice}
+        onCancel={() => setDragChoice(null)}
+        footer={
+          <Space wrap>
+            <Button onClick={() => setDragChoice(null)}>取消</Button>
+            <Button onClick={() => void confirmDragChoice("day")}>只挪本日（拆开）</Button>
+            <Button type="primary" onClick={() => void confirmDragChoice("whole")}>
+              整段一起移
+            </Button>
+          </Space>
+        }
+        destroyOnHidden
+      >
+        {dragChoice ? (
+          <div style={{ lineHeight: 1.7 }}>
+            <div>
+              工序「<b>{dragChoice.opName}</b>」共 {dragChoice.dayCount} 天
+            </div>
+            <div>
+              从 <b>{dragChoice.fromDate}</b> 拖到 <b>{dragChoice.toDate}</b>
+            </div>
+            <ul style={{ margin: "12px 0 0", paddingLeft: 18, color: "#4a5568" }}>
+              <li>
+                <b>整段一起移</b>：连续天数不变，整体按抓取日平移（两天仍挨着）
+              </li>
+              <li>
+                <b>只挪本日</b>：只把抓取的那一天拆开挪走，其余天留在原处（两天可拆开）
+              </li>
+            </ul>
+          </div>
+        ) : null}
       </Modal>
 
       <Modal

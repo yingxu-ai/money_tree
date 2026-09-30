@@ -269,7 +269,7 @@ backend/app/
 | 设备分析细权限码 | 已有模块级 SKU；按钮级未对齐排产 | 低 |
 | SSO | embed 客户门户登录一期仍走我方 JWT | 高（有客户时） |
 | 模式 B 单 API 白名单 | 一期按 module | 低 |
-| 租户表绑定 SKU | 现用 `ENABLED_MODULES` 环境变量 | 高（多客户托管时） |
+| 租户表绑定 SKU | 已落地 `sys_tenant.enabled_modules` + 本地测 `docs/tenant-sku-local-test.md` | 已完成 |
 | 跨模块检查挂 CI | `python scripts/check_module_imports.py` | 中 |
 | basename 反代实机 | edition 字段已接入，需子路径实测 | 中 |
 
@@ -307,4 +307,6 @@ backend/app/
 
 ## 10. 下一步
 
-按 §6.1 已知债与真实客户节奏迭代：删 re-export、租户级 SKU、SSO、CI 挂导入检查。
+按 §6.1 已知债与真实客户节奏迭代：删 re-export、SSO、CI 挂导入检查。
+
+**模式 B 本地验证**：见 [tenant-sku-local-test.md](./tenant-sku-local-test.md)（账号 `tenant_a` / `tenant_a123` = 仅排产）。

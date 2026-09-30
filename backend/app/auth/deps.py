@@ -91,9 +91,9 @@ async def enforce_api_permission(
     """
     全局接口权限：若配置台有启用规则，则校验对应权限码。
     无规则 / 未启用 → 不拦截（由各接口自己的 Depends 决定是否登录）。
-    另：按 ENABLED_MODULES 做模块级拦截（模式 B）。
+    另：按租户 / ENABLED_MODULES 做模块级拦截（售卖模式 B）。
     """
-    assert_module_allowed(request)
+    await assert_module_allowed(request, session, credentials)
 
     if is_public_api_path(request.url.path):
         return

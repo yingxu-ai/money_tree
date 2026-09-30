@@ -28,6 +28,7 @@ from app.models.system import (
     SysRole,
     SysRoleMenu,
     SysRolePermission,
+    SysTenant,
     SysUser,
     SysUserRole,
 )
@@ -545,6 +546,75 @@ async def _sync_menus_and_permissions(session) -> None:
             menu.visible = False
 
 
+async def _sync_tenants_and_sku_demo(session) -> None:
+    """租户 SKU 演示：租户1全开；租户2(customer_a)仅排产 + 账号 tenant_a。"""
+    from datetime import datetime
+
+    demos = [
+        (1, "演示租户（全模块）", "demo", "*", "本地默认，admin 所在租户"),
+        (2, "客户A（仅排产）", "customer_a", "scheduling", "售卖模式B本地测试：只开通排产"),
+    ]
+    for tid, name, code, modules, remark in demos:
+        row = (
+            await session.execute(select(SysTenant).where(SysTenant.id == tid))
+        ).scalar_one_or_none()
+        if row is None:
+            session.add(
+                SysTenant(
+                    id=tid,
+                    name=name,
+                    code=code,
+                    enabled_modules=modules,
+                    status="active",
+                    remark=remark,
+                )
+            )
+        else:
+            row.name = name
+            row.code = code
+            row.enabled_modules = modules
+            row.status = "active"
+            row.remark = remark
+            row.updated_at = datetime.utcnow()
+            row.is_deleted = False
+    await session.flush()
+
+    admin_role = (
+        await session.execute(select(SysRole).where(SysRole.code == "admin", SysRole.is_deleted.is_(False)))
+    ).scalar_one_or_none()
+
+    user = (
+        await session.execute(select(SysUser).where(SysUser.username == "tenant_a"))
+    ).scalar_one_or_none()
+    if user is None:
+        user = SysUser(
+            username="tenant_a",
+            password_hash=hash_password("tenant_a123"),
+            display_name="客户A用户",
+            status="active",
+            tenant_id=2,
+            dept_id=1,
+        )
+        session.add(user)
+        await session.flush()
+    else:
+        user.tenant_id = 2
+        user.status = "active"
+        user.is_deleted = False
+
+    if admin_role is not None:
+        linked = (
+            await session.execute(
+                select(SysUserRole).where(
+                    SysUserRole.user_id == user.id,
+                    SysUserRole.role_id == admin_role.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if linked is None:
+            session.add(SysUserRole(user_id=user.id, role_id=admin_role.id))
+
+
 async def _sync_api_permissions(session) -> None:
     """增量写入接口权限规则（按 method + path_pattern 去重）。"""
     for method, path, code, name, enabled, sort in API_PERMISSION_RULES:
@@ -585,6 +655,7 @@ async def seed() -> None:
             await _sync_api_permissions(session)
             await _sync_depts_and_dicts(session)
             await _sync_org_scope_demo(session)
+            await _sync_tenants_and_sku_demo(session)
             admin = (
                 await session.execute(
                     select(SysUser).where(SysUser.username == settings.default_admin_username)
@@ -593,7 +664,11 @@ async def seed() -> None:
             if admin and admin.dept_id is None:
                 admin.dept_id = 1
             await session.commit()
-            print("种子数据已存在，已同步品牌配置、演示驾驶舱、菜单权限、接口权限、部门与字典、组织范围演示账号")
+            print(
+                "种子数据已存在，已同步品牌/菜单/部门/租户SKU。"
+                " 测试账号 tenant_a / tenant_a123（租户2仅排产）；"
+                f"管理员 {settings.default_admin_username}（租户1全开）"
+            )
             return
 
         permissions: list[SysPermission] = []
@@ -700,6 +775,7 @@ async def seed() -> None:
 
         await _upsert_branding_configs(session)
         await _sync_api_permissions(session)
+        await _sync_tenants_and_sku_demo(session)
         session.add(
             SysConfig(
                 scope_type="SYSTEM",
@@ -711,8 +787,10 @@ async def seed() -> None:
         )
 
         await session.commit()
-        print(f"种子数据初始化完成。管理员: {settings.default_admin_username} / {settings.default_admin_password}")
-
+        print(
+            f"种子数据初始化完成。管理员: {settings.default_admin_username} / {settings.default_admin_password}；"
+            "客户A: tenant_a / tenant_a123（仅排产）"
+        )
 
 if __name__ == "__main__":
     asyncio.run(seed())

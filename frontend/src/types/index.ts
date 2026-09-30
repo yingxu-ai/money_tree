@@ -26,6 +26,8 @@ export interface UserInfo {
   roles: string[];
   role_names?: string[];
   permissions: string[];
+  /** null/缺省=全开；数组=租户已购模块 */
+  enabled_modules?: string[] | null;
   created_at?: string | null;
 }
 

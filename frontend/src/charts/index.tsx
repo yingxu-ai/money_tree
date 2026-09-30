@@ -111,17 +111,45 @@ export function PieChart({
   loading,
   style,
   className,
+  legendPosition = "bottom",
 }: BaseChartProps & {
   data: ChartPoint[];
+  /** bottom=底栏；right=右侧（条目多、易重叠时更合适） */
+  legendPosition?: "bottom" | "right";
 }) {
+  const legendRight = legendPosition === "right";
   const option: EChartsOption = {
-    tooltip: { trigger: "item" },
-    legend: { bottom: 0, type: "scroll" },
+    tooltip: { trigger: "item", formatter: "{b}<br/>{c}（{d}%）" },
+    legend: legendRight
+      ? {
+          type: "scroll",
+          orient: "vertical",
+          right: 8,
+          top: "middle",
+          itemWidth: 10,
+          itemHeight: 10,
+          textStyle: { fontSize: 12 },
+        }
+      : { bottom: 0, type: "scroll" },
     series: [
       {
         type: "pie",
-        radius: ["40%", "65%"],
+        radius: legendRight ? ["38%", "62%"] : ["40%", "65%"],
+        center: legendRight ? ["38%", "50%"] : ["50%", "46%"],
+        avoidLabelOverlap: true,
         data: data.map((p) => ({ name: p.label, value: p.value })),
+        label: legendRight
+          ? {
+              show: true,
+              formatter: "{d}%",
+              fontSize: 11,
+            }
+          : {
+              show: true,
+              formatter: "{b}\n{d}%",
+              fontSize: 11,
+            },
+        labelLine: { length: 12, length2: 8 },
         emphasis: {
           itemStyle: { shadowBlur: 8, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.15)" },
         },

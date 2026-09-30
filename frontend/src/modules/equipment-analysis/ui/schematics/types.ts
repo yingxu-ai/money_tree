@@ -1,4 +1,4 @@
-/** 设备健康示意热区定义 — 与 docs/equipment-analysis-schematic-plan.md 对齐 */
+/** 设备健康示意热区定义 */
 
 export type HotspotStatus = "red" | "orange" | "gray" | "dashed";
 

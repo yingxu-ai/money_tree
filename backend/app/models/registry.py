@@ -14,11 +14,13 @@ from app.models.system import (
     SysRole,
     SysRoleMenu,
     SysRolePermission,
+    SysTenant,
     SysUser,
     SysUserRole,
 )
 
 __all__ = [
+    "SysTenant",
     "SysUser",
     "SysRole",
     "SysUserRole",

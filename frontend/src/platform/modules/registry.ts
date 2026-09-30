@@ -16,7 +16,7 @@ const ALL_MODULES = [
   toolboxModule,
 ];
 
-/** 按当前 edition.enabled_modules 过滤后的路由 */
+/** 当前 edition 下可用的路由（模式 A 导出包会裁剪；本地 default 为全量） */
 export function getEnabledModuleRoutes(): ModuleRoute[] {
   const edition = getActiveEdition();
   return ALL_MODULES.filter((m) => isModuleEnabled(edition, m.moduleId)).flatMap(
@@ -24,10 +24,19 @@ export function getEnabledModuleRoutes(): ModuleRoute[] {
   );
 }
 
-/** 默认首页：优先设备列表，否则已启用模块的第一条路由 */
-export function getDefaultHomePath(): string {
-  const routes = getEnabledModuleRoutes();
+/** 按租户 SKU 选默认首页 */
+export function getDefaultHomePathForUser(
+  enabledModules?: string[] | null,
+): string {
+  const routes = getEnabledModuleRoutes().filter(
+    (r) => enabledModules == null || enabledModules.includes(r.moduleId),
+  );
   if (routes.some((r) => r.path === "/devices")) return "/devices";
   if (routes.some((r) => r.path === "/scheduling/gantt")) return "/scheduling/gantt";
   return routes[0]?.path || "/login";
+}
+
+/** @deprecated 用 getDefaultHomePathForUser */
+export function getDefaultHomePath(): string {
+  return getDefaultHomePathForUser(null);
 }

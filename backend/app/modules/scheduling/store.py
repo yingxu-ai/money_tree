@@ -3208,7 +3208,7 @@ class SchedulingStore:
             "ahead_days": (end - today).days,
             "clipped": clipped,
             "hint": (
-                "每单两行：上=计划（可调），下=实绩（签字后写入，只读）。"
+                "展开后拖中间改期，左右边缘可拉宽。"
                 + (" 更远计划可切换「看全未完成」。" if clipped else "")
             ),
         }
@@ -3316,19 +3316,6 @@ class SchedulingStore:
         axis_start = dates[0]
         enriched_ops = [self._enrich_op(o) for o in ops_all]
         active_ops = [o for o in enriched_ops if o.get("status") != "done"]
-        insert_order_ids = {
-            o.get("order_id")
-            for o in active_ops
-            if o.get("is_insert") and o.get("order_id")
-        }
-        delayed_order_ids = set()
-        for o in active_ops:
-            if int(o.get("delay_days") or 0) > 0 and o.get("order_id"):
-                delayed_order_ids.add(o["order_id"])
-        insert_n = len(insert_order_ids)
-        delay_n = len(delayed_order_ids)
-        insert_ops_n = sum(1 for o in active_ops if o.get("is_insert"))
-        delay_ops_n = sum(1 for o in active_ops if int(o.get("delay_days") or 0) > 0)
 
         order_ops: dict[str, list[dict]] = {}
         for op in enriched_ops:
@@ -3449,14 +3436,44 @@ class SchedulingStore:
         conflicts = self._detect_conflicts()
         heatmap = self._capacity_heatmap_unlocked(dates=dates)
 
+        plan_rows = [r for r in rows if r.get("row_kind") == "plan"]
+        order_n = len(plan_rows)
+        wo_n = len({r.get("work_order_id") for r in plan_rows if r.get("work_order_id")})
+
+        conflict_items = [c for c in conflicts if c.get("status") == "conflict"]
+        conflict_n = len(conflict_items)
+        conflict_order_n = len(
+            {c.get("order_code") for c in conflict_items if c.get("order_code")}
+        )
+
+        staffing_ops = [o for o in active_ops if int(o.get("staffing_gap") or 0) > 0]
+        staffing_n = len(staffing_ops)
+        staffing_gap_sum = sum(int(o.get("staffing_gap") or 0) for o in staffing_ops)
+
+        delayed_order_ids = {
+            o.get("order_id")
+            for o in active_ops
+            if int(o.get("delay_days") or 0) > 0 and o.get("order_id")
+        }
+        delay_n = len(delayed_order_ids)
+        delay_ops_n = sum(1 for o in active_ops if int(o.get("delay_days") or 0) > 0)
+
         return {
             "kpis": [
-                {"title": "订单行", "value": len(rows)},
-                {"title": "未完成工序", "value": len(active_ops)},
                 {
-                    "title": "插队订单",
-                    "value": insert_n,
-                    "ratio": f"{insert_ops_n} 道工序" if insert_ops_n else None,
+                    "title": "在排订单",
+                    "value": order_n,
+                    "ratio": f"含 {wo_n} 张工单" if wo_n else None,
+                },
+                {
+                    "title": "资源冲突",
+                    "value": conflict_n,
+                    "ratio": f"涉及 {conflict_order_n} 单" if conflict_n else None,
+                },
+                {
+                    "title": "缺编工序",
+                    "value": staffing_n,
+                    "ratio": f"共缺 {staffing_gap_sum} 人" if staffing_n else None,
                 },
                 {
                     "title": "预计延期",

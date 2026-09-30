@@ -6,10 +6,11 @@ import { useAuthStore } from "@/stores/authStore";
 import LoginPage from "@/pages/login/LoginPage";
 import { getActiveEdition } from "@/platform/edition";
 import {
-  getDefaultHomePath,
+  getDefaultHomePathForUser,
   getEnabledModuleRoutes,
 } from "@/platform/modules/registry";
 import ModuleForbiddenPage from "@/platform/modules/ModuleForbiddenPage";
+import TenantModuleGate from "@/platform/modules/TenantModuleGate";
 
 function Bootstrap() {
   const bootstrapAuth = useAuthStore((s) => s.bootstrap);
@@ -23,7 +24,11 @@ function Bootstrap() {
   return null;
 }
 
-/** React Router basename：须有前导 /、无尾 /；根路径用 undefined */
+function HomeRedirect() {
+  const enabled = useAuthStore((s) => s.user?.enabled_modules);
+  return <Navigate to={getDefaultHomePathForUser(enabled)} replace />;
+}
+
 function resolveBasename(raw: string | undefined): string | undefined {
   if (!raw || raw === "/") return undefined;
   let b = raw.trim();
@@ -33,8 +38,8 @@ function resolveBasename(raw: string | undefined): string | undefined {
 }
 
 export default function App() {
+  // 托管多租户：edition 全量时注册全部路由，按登录用户 enabled_modules 拦截
   const moduleRoutes = getEnabledModuleRoutes();
-  const home = getDefaultHomePath();
   const basename = useMemo(
     () => resolveBasename(getActiveEdition().basename),
     [],
@@ -46,9 +51,15 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<Navigate to={home} replace />} />
+          <Route path="/" element={<HomeRedirect />} />
           {moduleRoutes.map((r) => (
-            <Route key={r.path} path={r.path} element={r.element} />
+            <Route
+              key={r.path}
+              path={r.path}
+              element={
+                <TenantModuleGate moduleId={r.moduleId}>{r.element}</TenantModuleGate>
+              }
+            />
           ))}
           <Route path="/forbidden-module" element={<ModuleForbiddenPage />} />
           <Route path="*" element={<Navigate to="/forbidden-module" replace />} />

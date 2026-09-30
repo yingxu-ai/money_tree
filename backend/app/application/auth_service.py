@@ -1,6 +1,11 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.tenant_sku import (
+    enabled_modules_as_list,
+    get_tenant_enabled_modules,
+    module_for_menu_path,
+)
 from app.auth.context import CurrentUser
 from app.auth.data_scope import apply_user_scope, resolve_effective_scope, resolve_scope_filter
 from app.auth.schemas import MenuNode, UserInfo
@@ -119,8 +124,52 @@ class AuthService:
         )
         menus = [m for m in menus_result.scalars().all() if m.id in allowed_menu_ids]
 
+        # 按租户 SKU 再裁一刀（模式 B）
+        enabled = await get_tenant_enabled_modules(self.session, current.tenant_id)
+        if enabled is not None:
+            menus = [
+                m
+                for m in menus
+                if m.type == "CATALOG"
+                or module_for_menu_path(m.path) is None
+                or module_for_menu_path(m.path) in enabled
+            ]
+
         perm_map = await self._menu_permissions(allowed_menu_ids)
-        return self._build_menu_tree(menus, perm_map)
+        tree = self._build_menu_tree(menus, perm_map)
+        return self._prune_empty_catalogs(tree)
+
+    @staticmethod
+    def _prune_empty_catalogs(nodes: list[MenuNode]) -> list[MenuNode]:
+        out: list[MenuNode] = []
+        for node in nodes:
+            children = AuthService._prune_empty_catalogs(node.children)
+            if node.type == "CATALOG" and not children and not node.path:
+                continue
+            out.append(node.model_copy(update={"children": children}))
+        return out
+
+    async def _to_user_info(self, current: CurrentUser) -> UserInfo:
+        user = current.user
+        dept_name = await self._dept_name(user.dept_id)
+        enabled = await get_tenant_enabled_modules(self.session, user.tenant_id)
+        return UserInfo(
+            id=user.id,  # type: ignore[arg-type]
+            username=user.username,
+            display_name=user.display_name,
+            email=user.email,
+            avatar_url=getattr(user, "avatar_url", None),
+            tenant_id=user.tenant_id,
+            dept_id=user.dept_id,
+            dept_name=dept_name,
+            status=user.status,
+            data_scope=current.data_scope,
+            roles=current.roles,
+            role_names=current.role_names,
+            permissions=sorted(current.permissions),
+            enabled_modules=enabled_modules_as_list(enabled),
+            created_at=user.created_at.isoformat() if user.created_at else None,
+        )
 
     async def _build_current_user(self, user: SysUser) -> CurrentUser:
         role_result = await self.session.execute(
@@ -193,26 +242,6 @@ class AuthService:
             select(SysDept.name).where(SysDept.id == dept_id, SysDept.is_deleted.is_(False))
         )
         return result.scalar_one_or_none()
-
-    async def _to_user_info(self, current: CurrentUser) -> UserInfo:
-        user = current.user
-        dept_name = await self._dept_name(user.dept_id)
-        return UserInfo(
-            id=user.id,  # type: ignore[arg-type]
-            username=user.username,
-            display_name=user.display_name,
-            email=user.email,
-            avatar_url=getattr(user, "avatar_url", None),
-            tenant_id=user.tenant_id,
-            dept_id=user.dept_id,
-            dept_name=dept_name,
-            status=user.status,
-            data_scope=current.data_scope,
-            roles=current.roles,
-            role_names=current.role_names,
-            permissions=sorted(current.permissions),
-            created_at=user.created_at.isoformat() if user.created_at else None,
-        )
 
 
 class UserService:

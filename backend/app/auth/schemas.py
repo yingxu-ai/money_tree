@@ -26,6 +26,8 @@ class UserInfo(BaseModel):
     roles: list[str]
     role_names: list[str] = Field(default_factory=list)
     permissions: list[str]
+    # None = 租户全开；否则为已购 module_id 列表
+    enabled_modules: list[str] | None = None
     created_at: str | None = None
 
 
