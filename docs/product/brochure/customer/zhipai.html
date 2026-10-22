@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智排 · 智能排产｜接急单，不用重画整周计划</title>
+<meta name="description" content="智排是面向多品种、小批量、多班制离散工厂的智能排产模块：急单先试排，冲突分档提示，车间按天报工。不用接设备，不用先换 ERP，可单独上线。">
+<meta property="og:title" content="智排 · 智能排产｜接急单，不用重画整周计划">
+<meta property="og:description" content="智排是面向多品种、小批量、多班制离散工厂的智能排产模块：急单先试排，冲突分档提示，车间按天报工。不用接设备，不用先换 ERP，可单独上线。">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="zh_CN">
+<link rel="stylesheet" href="_customer.css">
+</head>
+<body class="m-zhipai">
+<a class="skip" href="#main">跳到正文</a>
+
+<div class="topbar no-print">
+  <div class="topbar-inner">
+    <a class="logo" href="index.html">元启·工小智 <span>智排</span></a>
+    <nav class="nav" aria-label="页面导航"><a href="index.html">总览</a><a class="current" href="zhipai.html">智排</a><a href="gongzhen.html">工诊</a><a href="zhijian.html">智检</a><a href="zhifang.html">智方</a><a href="zhiyi.html">智艺</a><a href="zhigui.html">智规</a></nav>
+    <div class="top-actions">
+      <button class="btn btn-ghost btn-sm print-btn" type="button" onclick="window.print()">打印 / PDF</button>
+      <a class="btn btn-primary btn-sm" href="#contact">预约演示</a>
+    </div>
+  </div>
+</div>
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">元启·工小智 · 智能排产（APS）· 已上线</div>
+        <h1>接急单，<br>不用重画整周计划</h1>
+        <p class="lead">订单一改，先试排：看清会影响哪张单、哪台机、哪个人；确认再发布，不满意一键撤回。车间按天报工，计划和实际对得上。</p>
+        <p class="hero-audience">谁最该看：计划员、生产经理、厂长</p>
+        <div class="badges"><span class="badge">不用接设备</span><span class="badge">不用先换 ERP</span><span class="badge">可单独上线</span></div>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="#contact">预约演示</a>
+          <a class="btn btn-ghost" href="#how">看它怎么排</a>
+        </div>
+        <p class="hero-note">适合：品种多、批量小、多班制、设备经常抢不过来的离散工厂（五金 / 钣金 / 机加 / 注塑 / 装配）。</p>
+      </div>
+      <div class="hero-visual">
+<figure class="viz-card gantt-card" role="img" aria-label="本周排产示意图：焊机一在周三同时排了订单A和急单，系统标红提示撞机；顶部显示试排中。">
+  <div class="viz-head"><div><strong>本周排产</strong><span class="viz-sub">界面示意</span></div><span class="pill pill-accent">试排中</span></div>
+  <div class="g-days" aria-hidden="true"><span></span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span></div>
+  <div class="g-row conflict">
+    <div class="g-label"><i class="dot red"></i>焊机 1</div>
+    <div class="bar steel top" style="grid-column:2/5">订单 A</div>
+    <div class="bar amber bottom" style="grid-column:4/5">急单</div>
+    <div class="bar ghost" style="grid-column:5/7">订单 C</div>
+  </div>
+  <div class="g-row"><div class="g-label"><i class="dot"></i>焊机 2</div><div class="bar teal" style="grid-column:3/6">订单 B</div></div>
+  <div class="g-row"><div class="g-label"><i class="dot"></i>装配组</div><div class="bar ghost" style="grid-column:5/7">订单 A</div></div>
+  <div class="g-foot"><span class="flag red">撞机 1</span><span class="flag amber">超载 0</span><span class="g-hint">改动先试排 · 确认再发布</span></div>
+</figure>
+</div>
+    </div>
+    <p class="print-cover-note">智能排产（智排） · 产品介绍 · 2026-10</p>
+  </div>
+</header>
+<main id="main">
+
+<section id="pain">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">01 · 你是不是也这样</div><h2>计划改一次，车间乱三天</h2><p class="lead">多数工厂不缺一张甘特图（排产时间轴），缺的是一套能跟着车间改的计划。</p></div>
+    <div class="grid-3">
+      <article class="card pain">
+        <div class="kicker">急单</div>
+        <h3>Excel 全表重排，改完才发现撞机</h3>
+        <p>急单插进来，整张表重算；改到一半发现焊机被两个人同时占，现场才爆出来。</p>
+        <div class="answer">→ 先试排，看到影响再发布</div>
+      </article>
+      <article class="card pain">
+        <div class="kicker">两张皮</div>
+        <h3>计划在办公室，报工在纸上</h3>
+        <p>甘特图很漂亮，实际做到哪一步没人知道；偏差没人处理，计划永远是理想态。</p>
+        <div class="answer">→ 车间按天报工，偏差有人管</div>
+      </article>
+      <article class="card pain">
+        <div class="kicker">冲突</div>
+        <h3>要么全红，要么全不管</h3>
+        <p>同班多单本可以串行，被系统一刀切卡死；Excel 又发现不了抢机，最后退回口头调度。</p>
+        <div class="answer">→ 抢机才红，活太满才黄</div>
+      </article></div>
+  </div>
+</section>
+
+<section class="band" id="how">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">02 · 用起来是什么样</div><h2>建一次，每天改单，现场报工</h2><p class="lead">不改变车间的说话方式：计划员排产，班组长调机台，班组报工，主管看风险。</p></div>
+    <div class="steps">
+      <div class="step">
+        <div class="n">STEP 01 · 一次</div><h3>建基础资料</h3><p>设备、人员与技能、工序与标准工时、班次。班次固定就建一次，不用天天维护。</p><div class="who">计划员 / 实施协助</div>
+      </div>
+      <div class="step">
+        <div class="n">STEP 02 · 每天</div><h3>排产、改单</h3><p>订单进甘特图，拖拽调日期、班次、机台和责任人；急单先试排，看影响再发布。</p><div class="who">计划员 / 班组长</div>
+      </div>
+      <div class="step">
+        <div class="n">STEP 03 · 每天</div><h3>现场报工</h3><p>开工 / 暂停 / 完工，日报加电子签名；计划和实际的偏差有人处理。</p><div class="who">班组 / 主管</div>
+      </div></div>
+    <div class="roles" aria-label="使用角色"><span class="role"><b>计划员</b> 排产、插单、重排</span><span class="role"><b>班组长</b> 调机台、处理冲突</span><span class="role"><b>班组</b> 开工、完工、签字</span><span class="role"><b>主管</b> 看交期、负荷、风险</span></div>
+    <div class="callout"><div class="ico" aria-hidden="true">i</div><p><strong>不用接设备也能先用。</strong>系统按计划和报工判断设备占用；以后接了工诊，再叠加真实运行状态。第一笔投入不用花在设备联网采集（IoT）上。</p></div>
+  </div>
+</section>
+
+<section id="diff">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">03 · 三个关键差异</div><h2>抢机才红，活太满才黄</h2><p class="lead">规则贴近老师傅常识，系统才有人用。</p>
+      <div class="flags"><span class="flag red">硬冲突 · 必须改</span><span class="flag amber">超载 · 提醒，可继续</span></div>
+    </div>
+    <div class="diff">
+      <article class="card">
+        <div class="tagline">先试后发</div><h3>改坏了，一键撤回</h3><p>试排（先模拟一版，不马上生效）里随便改，影响预览看清哪张单会延、哪台机会撞；发布才生效，放弃就回到原样。</p>
+      </article>
+      <article class="card">
+        <div class="tagline">冲突分档</div><h3>该红的红，该黄的黄</h3><p>两个人抢一台机＝硬冲突，必须改；同一个人同班多单＝按串行算，超过班次才黄灯提醒，仍可保存。</p>
+      </article>
+      <article class="card">
+        <div class="tagline">计划落地</div><h3>排到具体机台和人</h3><p>周历回答谁上班，工序模板回答这类活能用哪些机，甘特最后定哪一台；不混在一张表里硬排。</p>
+      </article></div>
+    
+<div class="signature">
+  <div class="sig-title">试排影响清单 · 示意</div>
+  <div class="sig-grid four">
+    <div class="sig-cell"><span>受影响订单</span><b>3 张</b></div>
+    <div class="sig-cell"><span>交期变化</span><b class="warn">1 张延后</b></div>
+    <div class="sig-cell"><span>撞机</span><b class="red">1 处</b></div>
+    <div class="sig-cell"><span>可回退</span><b class="ok">是</b></div>
+  </div>
+  <p class="sig-note">发布前就能看到后果；放弃则回到发布前，不用推倒重来。</p>
+</div>
+  </div>
+</section>
+
+<section class="band" id="scenario">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">04 · 一个具体场景</div><h2>从“全表重排”到“会上就能定”</h2><p class="lead">同样的急单，区别不在排得快，而在改之前就知道后果。</p></div>
+    <div class="timeline">
+      <div class="t-item"><div class="time">16:00</div><h3>急单进来</h3><p>客户加急，标记为加急优先级。</p></div>
+      <div class="t-item"><div class="time">16:05</div><h3>进入试排</h3><p>按加急优先重排未完成工序，不动已执行的历史。</p></div>
+      <div class="t-item"><div class="time">16:10</div><h3>看影响</h3><p>3 张单交期变化，1 台焊机撞机；换一台同类型焊机。</p></div>
+      <div class="t-item"><div class="time">16:20</div><h3>发布</h3><p>班组长确认机台和责任人，发布；不满意可放弃回退。</p></div></div>
+    <div class="compare-box">
+      <div class="before"><b>以前</b>Excel 全表重排，改完发现撞机，再改；计划发出去，晚上又变。</div>
+      <div class="after"><b>现在</b>会上先看后果，确认再发布；改坏了撤回，不用推倒重来。</div>
+    </div>
+    <p class="tiny" style="margin-top:12px">以上为示例场景，时间为示意；实际效果以试点数据为准。</p>
+  </div>
+</section>
+
+<section id="fit">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">05 · 适不适合你</div><h2>先看订单、设备和基础资料</h2><p class="lead">不是所有工厂都适合；先看订单结构、设备争用和主数据。</p></div>
+    <div class="fit">
+      <div class="fit-col yes"><h3>通常会比较适合</h3><ul><li>品种多、批量小，插单和返工多</li><li>三班倒或多班制，请假、替班频繁</li><li>焊机、机加、注塑等关键设备经常抢用</li><li>计划在办公室、报工在纸上，两张皮</li><li>想先管交期和争用，不想先上设备联网</li></ul></div>
+      <div class="fit-col no"><h3>建议先别急</h3><ul><li>单品种、大批量、节拍固定的流水线</li><li>订单机台和交期完全由客户指定，自己不能调</li><li>没有设备清单、工序和标准工时，也不打算整理</li><li>只想解决“报工记录”，不需要排产</li><li>期望“AI 全自动、人不用管”</li></ul></div>
+      <div class="gate"><b>上线门槛</b><p>至少要有：设备清单、工序 / 标准工时、当前在制订单。没有这三样，排出来也不可信。</p></div>
+    </div>
+    <p class="tiny" style="margin-top:12px">不符合不代表永远不能用，但先从最痛的点小范围试点更稳。</p>
+  </div>
+</section>
+
+<section class="band" id="start">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">06 · 怎么开始</div><h2>先在一个车间，跑一周真实订单</h2><p class="lead">不要先全厂铺开；用一个车间、5–10 个产品、一周真实订单，验证插单和交期。</p></div>
+    <div class="start-grid">
+      <div class="panel">
+        <h3>试点三步</h3><ol class="start-steps"><li><b>选一个车间 + 5–10 个产品</b><span>订单结构、设备争用、交期压力最明显的那一组。</span></li><li><b>建资料 + 导入在制订单</b><span>设备、人员、工序、班次；把当前在制订单和交期录进来。</span></li><li><b>跑一周真实订单</b><span>试排、插单、发布、报工；复盘插单响应和交期风险。</span></li></ol>
+        <div class="spec"><div><b>部署</b>云端开通（SaaS），或本地部署</div><div><b>终端</b>计划用电脑；现场用车间电脑 / 平板</div><div><b>数据</b>账号、组织、权限随平台</div><div><b>服务</b>上线培训 + 使用答疑</div></div>
+      </div>
+      <div class="panel">
+        <h3>试点前，你只需要准备这些</h3><ul class="checklist"><li>设备清单：编号、名称、所属车间、班次</li><li>人员名单：班组、技能、可上班次</li><li>5–10 个典型产品：工序、标准工时、可用设备</li><li>当前在制订单和近期交期</li><li>现在的排产表（Excel 也行）</li></ul>
+        <p class="tiny" style="margin-top:12px">基础资料可以由实施协助整理；批量导入的格式和范围，试点前一起确认。</p>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:18px"><div class="ico" aria-hidden="true">价</div><p><strong>怎么报价：</strong>按上线范围和车间规模沟通；可以先小范围试点，再决定是否扩展。具体功能、交付范围与报价以合同为准。</p></div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">07 · 常见问题</div><h2>你可能还会问</h2></div>
+    <div class="faq"><div class="faq-item"><h3>试排会不会把正式计划搞乱？</h3><p>不会。试排是独立沙箱，发布才生效；放弃就回到发布前。</p></div><div class="faq-item"><h3>没有标准工时能排吗？</h3><p>可以先按历史工时估，但排产可信度会打折；试点时优先补 5–10 个典型产品。</p></div><div class="faq-item"><h3>和 ERP / MES 是什么关系？</h3><p>可以单独用；BOM、库存、采购、财务留在 ERP / 进销存，智排管工单、工序、设备、人员和报工。</p></div><div class="faq-item"><h3>手机能报工吗？</h3><p>当前建议用车间电脑或平板；手机端暂未适配。如果你们希望手机报工，试点时可以一起评估。</p></div><div class="faq-item"><h3>多久能上线、多少钱？</h3><p>取决于基础资料和试点范围；按上线范围与车间规模沟通，先试点再决定。</p></div><div class="faq-item"><h3>我们厂小，值得上吗？</h3><p>如果痛点是插单、撞机、交期，先一条线 / 一个车间试，投入可控；不合适会直接说。</p></div></div>
+  </div>
+</section>
+
+<section class="band" id="contact">
+  <div class="wrap">
+    <div class="contact">
+      <div>
+        <div class="eyebrow">下一步</div>
+        <h2>想看智排适不适合你们厂？</h2>
+        <p>把现在的排产表（Excel 也行）和设备清单发来，先做一次 30 分钟线上沟通。不合适会直接说，不浪费彼此时间。</p>
+        <p class="contact-give">你会拿到：一张按你们订单试排的影响清单（交期 / 撞机 / 超载）。</p>
+        <div class="contact-lines">
+          <div><b>联系人</b>【姓名】</div>
+          <div><b>电话</b>【手机】</div>
+          <div><b>微信</b>【微信号】</div>
+          <div><b>邮箱</b>【邮箱】</div>
+        </div>
+        <p class="tiny">微信扫码或直接电话联系，都可以。</p>
+        <p class="print-only-foot">合同物料：智能排产模块（智排） · 2026-10<br>具体功能、交付范围与报价以合同为准；界面为示意，场景数据为示例。</p>
+      </div>
+      <div class="qr">二维码位置<br><span style="font-size:11px">替换为销售微信</span></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="big">元启·工小智 · 智排</div>
+    <p>合同物料名：智能排产模块（智排）。本页为产品介绍；具体功能、交付范围与报价以合同为准。界面为示意，场景数据为示例。</p>
+    <div class="links"><a href="index.html">全部模块</a><a href="zhipai.html">智排</a><a href="gongzhen.html">工诊</a><a href="zhijian.html">智检</a><a href="zhifang.html">智方</a><a href="zhiyi.html">智艺</a><a href="zhigui.html">智规</a><a href="../modules/zhipai.html">给计划员 / IT：详细能力说明</a></div>
+    <p class="tiny" style="margin-top:12px">版本 2026-10 · 元启·工小智</p>
+  </div>
+</footer>
+</body>
+</html>

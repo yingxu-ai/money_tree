@@ -88,10 +88,15 @@ def build_scope_filter(
     return ScopeFilter(data_scope=data_scope, allowed_dept_ids=set())
 
 
-async def load_dept_pairs(session: AsyncSession) -> list[tuple[int, int | None]]:
-    result = await session.execute(
-        select(SysDept.id, SysDept.parent_id).where(SysDept.is_deleted.is_(False))
-    )
+async def load_dept_pairs(
+    session: AsyncSession,
+    *,
+    tenant_id: int | None = None,
+) -> list[tuple[int, int | None]]:
+    stmt = select(SysDept.id, SysDept.parent_id).where(SysDept.is_deleted.is_(False))
+    if tenant_id is not None:
+        stmt = stmt.where(SysDept.tenant_id == tenant_id)
+    result = await session.execute(stmt)
     return [(row[0], row[1]) for row in result.all()]
 
 
@@ -101,8 +106,9 @@ async def resolve_scope_filter(
     data_scope: str,
     user_id: int,
     dept_id: int | None,
+    tenant_id: int | None = None,
 ) -> ScopeFilter:
-    pairs = await load_dept_pairs(session)
+    pairs = await load_dept_pairs(session, tenant_id=tenant_id)
     return build_scope_filter(
         data_scope,
         user_id=user_id,

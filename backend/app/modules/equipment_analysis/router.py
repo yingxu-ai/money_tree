@@ -48,11 +48,14 @@ def _load_catalog() -> dict[str, Any]:
     return data
 
 
-async def _fetch_depts(session: AsyncSession) -> list[dict[str, Any]]:
-    """与系统部门树同源，避免 catalog 静态 depts 与库内名称/结构不一致。"""
+async def _fetch_depts(session: AsyncSession, tenant_id: int) -> list[dict[str, Any]]:
+    """与系统部门树同源；仅当前租户，避免跨租户组织串数据。"""
     result = await session.execute(
         select(SysDept)
-        .where(SysDept.is_deleted.is_(False))
+        .where(
+            SysDept.is_deleted.is_(False),
+            SysDept.tenant_id == tenant_id,
+        )
         .order_by(SysDept.sort, SysDept.id)
     )
     return [
@@ -2497,7 +2500,7 @@ async def devices_page(
     _user=Depends(get_current_user),
 ):
     catalog = _load_catalog()
-    depts = await _fetch_depts(session)
+    depts = await _fetch_depts(session, _user.tenant_id)
     devices = _sort_devices_with_anchors(_filter_devices_by_dept(catalog["devices"], depts, dept_id))
     return ok(
         request,
@@ -2836,7 +2839,7 @@ async def analysis_current(
     _user=Depends(get_current_user),
 ):
     catalog = _load_catalog()
-    depts = await _fetch_depts(session)
+    depts = await _fetch_depts(session, _user.tenant_id)
     devices = _filter_devices(catalog["devices"], depts, dept_id, device_type)
     scope = _scope_meta(depts, dept_id)
     group_meta = _group_by_meta(depts, dept_id, group_by)
@@ -3096,7 +3099,7 @@ async def analysis_future(
     _user=Depends(get_current_user),
 ):
     catalog = _load_catalog()
-    depts = await _fetch_depts(session)
+    depts = await _fetch_depts(session, _user.tenant_id)
     devices = _filter_devices_by_dept(catalog["devices"], depts, dept_id)
     scope = _scope_meta(depts, dept_id)
     devices = sorted(devices, key=lambda d: -d["future"]["risk_7d"])
@@ -3174,7 +3177,7 @@ async def analysis_optimize(
     _user=Depends(get_current_user),
 ):
     catalog = _load_catalog()
-    depts = await _fetch_depts(session)
+    depts = await _fetch_depts(session, _user.tenant_id)
     devices = _filter_devices_by_dept(catalog["devices"], depts, dept_id)
     label_of = OPTIMIZE_LABELS
 
@@ -3445,7 +3448,7 @@ async def analysis_diagnosis_overview(
 ):
     """分析诊断 · 总览：筛选 + KPI + 健康分布 + 设备表 + 事件。"""
     catalog = _load_catalog()
-    depts = await _fetch_depts(session)
+    depts = await _fetch_depts(session, _user.tenant_id)
     devices = _filter_devices(catalog["devices"], depts, dept_id, device_type)
 
     if run_status == "online":
@@ -3555,7 +3558,7 @@ async def analysis_devices_tree(
     _user=Depends(get_current_user),
 ):
     catalog = _load_catalog()
-    depts = await _fetch_depts(session)
+    depts = await _fetch_depts(session, _user.tenant_id)
     tree = _build_compare_device_tree(depts, catalog["devices"], dept_id)
     scope = _scope_meta(depts, dept_id)
     return ok(
@@ -3586,7 +3589,7 @@ async def analysis_devices_compare(
         ids = ids[:MAX_COMPARE_DEVICES]
 
     catalog = _load_catalog()
-    depts = await _fetch_depts(session)
+    depts = await _fetch_depts(session, _user.tenant_id)
     device_map = _device_map(catalog)
     missing = [i for i in ids if i not in device_map]
     if missing:

@@ -10,6 +10,7 @@ import {
   Radio,
   Select,
   Space,
+  Spin,
   Table,
   Tag,
   Tooltip,
@@ -50,21 +51,43 @@ import {
   REPLAN_SCOPE_OPTIONS,
   REPLAN_STRATEGY_OPTIONS,
   replanGantt,
-  resetSchedulingDemo,
   scheduleGanttOrder,
   undoGantt,
+  type DaySegment,
   type GanttConflict,
   type GanttOption,
   type GanttOrderRow,
   type ImpactPreview,
   type OperationItem,
+  type PersonItem,
+  type EquipmentItem,
 } from "@/modules/scheduling/api/scheduling";
+import {
+  collectActualDayShiftStats,
+  collectPlanDayShiftStats,
+  formatDateRangeFull,
+  formatDayShiftBrief,
+  formatDayShiftProgress,
+} from "@/modules/scheduling/dayShiftStats";
 import OrderDetailDrawer from "@/modules/scheduling/pages/OrderDetailDrawer";
 import FleetStatsDrawer from "@/modules/scheduling/pages/FleetStatsDrawer";
 import { KpiRow } from "@/components/blocks";
 import { DataTable, DeleteAction, PageHeader, StatusTag } from "@/components/kit";
 import { useMutation } from "@/hooks/useMutation";
 import { useRequest } from "@/hooks/useRequest";
+
+type EditSegForm = {
+  start_date?: Dayjs | string;
+  end_date?: Dayjs | string;
+  /** @deprecated 兼容旧 range */
+  range?: [Dayjs, Dayjs] | Dayjs[];
+  required_headcount?: number;
+  required_equipment?: number;
+  person_ids?: string[];
+  equipment_ids?: string[];
+  /** 内部：日期+班次指纹，变了才用预览覆盖人机 */
+  _dateKey?: string;
+};
 
 function formatDateLabel(iso?: string | null) {
   if (!iso) return "-";
@@ -115,6 +138,138 @@ function expandOpPlanDays(op: OperationItem): PlanDayCell[] {
   return out;
 }
 
+function segStartEnd(row: EditSegForm | undefined): { start: string; end: string } {
+  if (!row) return { start: "", end: "" };
+  if (row.start_date || row.end_date) {
+    const start = (row.start_date ? toDateStr(row.start_date) : "") || "";
+    const end = (row.end_date ? toDateStr(row.end_date) : start) || start;
+    return { start, end: end || start };
+  }
+  const r = row.range;
+  const start = (r?.[0] ? toDateStr(r[0]) : "") || "";
+  const end = (r?.[1] ? toDateStr(r[1]) : start) || start;
+  return { start, end: end || start };
+}
+
+/** 打开编辑：按日历连续日合并为表单段，并带上人数/设备/已派人机。 */
+function collapseOpToEditFormSegments(op: OperationItem): EditSegForm[] {
+  type DayNeed = {
+    date: string;
+    hc: number;
+    eq: number;
+    pids: string[];
+    eids: string[];
+  };
+  const dayMap = new Map<string, DayNeed>();
+  const segs = (op.plan_segments ?? []).filter((s) => s.start);
+  if (segs.length) {
+    for (const s of segs) {
+      let cur = dayjs(s.start.slice(0, 10));
+      const end = dayjs((s.end || s.start).slice(0, 10));
+      const pids = [
+        ...(s.person_ids?.length
+          ? s.person_ids
+          : s.person_id
+            ? [s.person_id]
+            : []),
+      ];
+      const eids = [...(s.equipment_ids || [])];
+      const hc = Math.max(
+        1,
+        Number(s.required_headcount || op.required_headcount || pids.length || 1),
+      );
+      const eq = Math.max(
+        1,
+        Number(s.required_equipment || eids.length || 1),
+      );
+      while (cur.isBefore(end, "day") || cur.isSame(end, "day")) {
+        const d = cur.format("YYYY-MM-DD");
+        dayMap.set(d, { date: d, hc, eq, pids, eids });
+        cur = cur.add(1, "day");
+      }
+    }
+  } else if (op.plan_start) {
+    let cur = dayjs(op.plan_start.slice(0, 10));
+    const end = dayjs((op.plan_end || op.plan_start).slice(0, 10));
+    const pids = [...(op.assignee_ids || (op.assignee_id ? [op.assignee_id] : []))];
+    const eids = [
+      ...(op.equipment_ids || (op.equipment_id ? [op.equipment_id] : [])),
+    ];
+    const hc = Math.max(1, Number(op.required_headcount || pids.length || 1));
+    const eq = Math.max(1, Number(eids.length || 1));
+    while (cur.isBefore(end, "day") || cur.isSame(end, "day")) {
+      const d = cur.format("YYYY-MM-DD");
+      dayMap.set(d, { date: d, hc, eq, pids, eids });
+      cur = cur.add(1, "day");
+    }
+  }
+  const days = [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+  if (!days.length) {
+    const today = dayjs();
+    return [
+      {
+        start_date: today,
+        end_date: today,
+        required_headcount: 1,
+        required_equipment: 1,
+        person_ids: [],
+        equipment_ids: [],
+      },
+    ];
+  }
+  const out: EditSegForm[] = [];
+  for (const d of days) {
+    const last = out[out.length - 1];
+    const lastEnd = last?.end_date ? toDateStr(last.end_date) : "";
+    const contiguous =
+      last &&
+      last.required_headcount === d.hc &&
+      last.required_equipment === d.eq &&
+      dayjs(lastEnd).add(1, "day").format("YYYY-MM-DD") === d.date;
+    if (contiguous && last) {
+      last.end_date = dayjs(d.date);
+      const pset = new Set([...(last.person_ids || []), ...d.pids]);
+      const eset = new Set([...(last.equipment_ids || []), ...d.eids]);
+      last.person_ids = [...pset];
+      last.equipment_ids = [...eset];
+    } else {
+      out.push({
+        start_date: dayjs(d.date),
+        end_date: dayjs(d.date),
+        required_headcount: d.hc,
+        required_equipment: d.eq,
+        person_ids: [...d.pids],
+        equipment_ids: [...d.eids],
+      });
+    }
+  }
+  return out;
+}
+
+function rangesOverlap(a0: string, a1: string, b0: string, b1: string) {
+  return a0 <= b1 && b0 <= a1;
+}
+
+/** 多选标签过多时折叠，悬停看全部 */
+function collapsedTagsPlaceholder(omitted: { label?: ReactNode }[], labels: string[]) {
+  const text = labels.filter(Boolean).join("、");
+  return (
+    <Tooltip title={text || `另有 ${omitted.length} 项`}>
+      <span
+        style={{
+          cursor: "default",
+          color: "#4a5568",
+          background: "#edf2f7",
+          borderRadius: 4,
+          padding: "0 6px",
+        }}
+      >
+        +{omitted.length}
+      </span>
+    </Tooltip>
+  );
+}
+
 /** 连续同人日合并为 plan_segments。 */
 function compressDaysToSegments(days: PlanDayCell[]): PlanSegPayload[] {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
@@ -147,85 +302,10 @@ function buildSegmentsAfterMovingDay(
   const src = days.find((d) => d.date === fromDate);
   const rest = days.filter((d) => d.date !== fromDate);
   if (!rest.some((d) => d.date === toDate)) {
-    rest.push({ date: toDate, person_id: src?.person_id ?? null });
+    // 挪到新日：人不跟着抄，交给后端按目标日排班解析
+    rest.push({ date: toDate, person_id: null });
   }
   return compressDaysToSegments(rest);
-}
-
-/**
- * 左右拉宽某一连续 run（bar_start~bar_end）。
- * 左缘不得早于今天；右缘可拉到更远的未来。
- */
-function buildAfterBarResize(
-  op: OperationItem,
-  edge: "left" | "right",
-  runStart: string,
-  runEnd: string,
-  targetDate: string,
-  today: string,
-): {
-  plan_start: string;
-  duration_days: number;
-  plan_segments?: PlanSegPayload[];
-} | null {
-  const preview = previewResizeRange(edge, runStart, runEnd, targetDate, today);
-  if (!preview) return null;
-  if (preview.start === runStart && preview.end === runEnd) return null;
-
-  const newStart = preview.start;
-  const newEnd = preview.end;
-  const duration = dayjs(newEnd).diff(dayjs(newStart), "day") + 1;
-  const segs = (op.plan_segments ?? []).filter((s) => s.start);
-  if (!segs.length) {
-    return { plan_start: newStart, duration_days: duration };
-  }
-
-  const days = expandOpPlanDays(op);
-  const outside = days.filter((d) => d.date < runStart || d.date > runEnd);
-  const pid =
-    days.find((d) => d.date >= runStart && d.date <= runEnd)?.person_id ?? null;
-  const runDays: PlanDayCell[] = [];
-  let cur = dayjs(newStart);
-  const endD = dayjs(newEnd);
-  while (cur.isBefore(endD, "day") || cur.isSame(endD, "day")) {
-    runDays.push({ date: cur.format("YYYY-MM-DD"), person_id: pid });
-    cur = cur.add(1, "day");
-  }
-  const merged = compressDaysToSegments([...outside, ...runDays]);
-  const planStart = merged.map((s) => s.start).sort()[0] || newStart;
-  return {
-    plan_start: planStart,
-    duration_days: merged.reduce(
-      (n, s) => n + dayjs(s.end).diff(dayjs(s.start), "day") + 1,
-      0,
-    ),
-    plan_segments: merged,
-  };
-}
-
-/** 拉伸过程中的预览起止（与正式提交同一套钳制规则）。 */
-function previewResizeRange(
-  edge: "left" | "right",
-  runStart: string,
-  runEnd: string,
-  targetDate: string,
-  today: string,
-): { start: string; end: string } | null {
-  let newStart = runStart;
-  let newEnd = runEnd;
-  if (edge === "left") {
-    if (runStart < today) return { start: runStart, end: runEnd };
-    if (targetDate < today) {
-      if (runStart <= today) return { start: runStart, end: runEnd };
-      newStart = today;
-    } else {
-      newStart = targetDate;
-    }
-    if (newStart > runEnd) newStart = runEnd;
-  } else {
-    newEnd = targetDate < runStart ? runStart : targetDate;
-  }
-  return { start: newStart, end: newEnd };
 }
 
 function shortDate(iso?: string | null) {
@@ -241,8 +321,6 @@ function orderRollupStatus(ops: OperationItem[]) {
   if (ops.some((o) => o.plan_start)) return "未开始";
   return "未开始";
 }
-
-type EffortLine = { name: string; hours: number; days: number };
 
 function personNameMap(persons?: Array<{ id: string; name: string }>) {
   const map = new Map<string, string>();
@@ -279,124 +357,10 @@ function dayAssigneeNames(
   return [];
 }
 
-function planEffortByPerson(
-  op: OperationItem,
-  nameById: Map<string, string>,
-): EffortLine[] {
-  const hpd = op.hours_per_day ?? 8;
-  const segs = (op.plan_segments ?? []).filter((s) => s.start);
-  if (segs.length) {
-    const daysByKey = new Map<string, number>();
-    for (const s of segs) {
-      const days = dayjs((s.end || s.start).slice(0, 10)).diff(dayjs(s.start.slice(0, 10)), "day") + 1;
-      const key = s.person_id || "__shared__";
-      daysByKey.set(key, (daysByKey.get(key) || 0) + days);
-    }
-    if (daysByKey.size === 1 && daysByKey.has("__shared__")) {
-      const days = daysByKey.get("__shared__") || 1;
-      const label =
-        (op.assignee_names?.length ? op.assignee_names.join("、") : op.assignee_name) ||
-        "未派人";
-      return [{ name: label, hours: Math.round(days * hpd * 10) / 10, days }];
-    }
-    const out: EffortLine[] = [];
-    for (const [key, days] of daysByKey) {
-      if (key === "__shared__") {
-        const label =
-          (op.assignee_names?.length ? op.assignee_names.join("、") : op.assignee_name) ||
-          "未派人";
-        out.push({ name: label, hours: Math.round(days * hpd * 10) / 10, days });
-        continue;
-      }
-      out.push({
-        name: nameById.get(key) || key,
-        hours: Math.round(days * hpd * 10) / 10,
-        days,
-      });
-    }
-    return out;
-  }
-  const days = Math.max(1, op.segment_day_sum || op.duration_days || 1);
-  const hours = op.planned_hours || days * hpd;
-  const names = op.assignee_names?.length
-    ? op.assignee_names
-    : op.assignee_name
-      ? [op.assignee_name]
-      : ["未派人"];
-  if (names.length === 1) {
-    return [{ name: names[0], hours: Math.round(hours * 10) / 10, days }];
-  }
-  return names.map((n) => ({
-    name: n,
-    hours: Math.round(days * hpd * 10) / 10,
-    days,
-  }));
-}
-
-function actualEffortByPerson(op: OperationItem): EffortLine[] {
-  const a0 = op.actual_start?.slice(0, 10);
-  if (!a0) return [];
-  const a1 =
-    op.actual_end?.slice(0, 10) ||
-    (op.status === "running" || op.status === "paused" ? TODAY_ISO() : a0);
-  const days = Math.max(1, dayjs(a1).diff(dayjs(a0), "day") + 1);
-  const hpd = op.hours_per_day ?? 8;
-  const names = op.assignee_names?.length
-    ? op.assignee_names
-    : op.assignee_name
-      ? [op.assignee_name]
-      : ["未派人"];
-  return names.map((n) => ({
-    name: n,
-    hours: Math.round(days * hpd * 10) / 10,
-    days,
-  }));
-}
-
-function EffortSection({
-  title,
-  blocks,
-}: {
-  title: string;
-  blocks: Array<{ name: string; lines: EffortLine[] }>;
-}) {
-  return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ fontWeight: 600, marginBottom: 2 }}>{title}</div>
-      {blocks.length ? (
-        blocks.map((b) => (
-          <div key={`${title}-${b.name}`} style={{ marginBottom: 4 }}>
-            <div style={{ color: "rgba(255,255,255,0.88)" }}>{b.name}</div>
-            {b.lines.map((l, i) => (
-              <div
-                key={`${b.name}-${l.name}-${i}`}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr auto auto",
-                  columnGap: 12,
-                  paddingLeft: 10,
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{l.name}</span>
-                <span style={{ textAlign: "right", minWidth: 36 }}>{l.hours}h</span>
-                <span style={{ textAlign: "right", minWidth: 28 }}>{l.days}天</span>
-              </div>
-            ))}
-          </div>
-        ))
-      ) : (
-        <div style={{ paddingLeft: 10 }}>—</div>
-      )}
-    </div>
-  );
-}
-
 function buildOrderHoverTip(
   row: GanttOrderRow,
   opts: {
-    nameById: Map<string, string>;
-    conflictCount: number;
+    actualRow?: GanttOrderRow | null;
   },
 ): ReactNode {
   const ops = [...(row.operations || [])].sort((a, b) => (a.seq || 0) - (b.seq || 0));
@@ -407,81 +371,44 @@ function buildOrderHoverTip(
     .filter(Boolean)
     .join(" · ");
 
-  const remaining =
-    ops.filter((o) => o.status !== "done").length + (row.unreleased_count || 0);
-  const planStart = row.plan_start || ops.map((o) => o.plan_start).filter(Boolean).sort()[0];
+  const planStats = collectPlanDayShiftStats(ops);
+  const planStart =
+    planStats.start ||
+    row.plan_start ||
+    ops.map((o) => o.plan_start).filter(Boolean).sort()[0];
   const planEnd =
+    planStats.end ||
     row.estimated_end ||
     [...ops.map((o) => o.plan_end || o.plan_start).filter(Boolean)].sort().slice(-1)[0];
-  const plannedHours = ops.reduce(
-    (n, o) =>
-      n +
-      (o.planned_hours ||
-        (o.segment_day_sum || o.duration_days || 0) * (o.hours_per_day ?? 8)),
-    0,
-  );
-  const hpdHint = ops[0]?.hours_per_day ?? 8;
 
-  const planBlocks = ops
-    .filter((o) => o.plan_start || (o.plan_segments && o.plan_segments.length))
-    .map((o) => ({
-      name: o.name,
-      lines: planEffortByPerson(o, opts.nameById),
-    }));
-
-  const actualBlocks = ops
-    .map((o) => ({ name: o.name, lines: actualEffortByPerson(o) }))
-    .filter((x) => x.lines.length);
-
-  let progStart: string | undefined;
-  let progEnd: string | undefined;
-  for (const o of ops) {
-    const a0 = o.actual_start?.slice(0, 10);
-    if (!a0) continue;
-    const a1 =
-      o.actual_end?.slice(0, 10) ||
-      (o.status === "running" || o.status === "paused" ? TODAY_ISO() : a0);
-    if (!progStart || a0 < progStart) progStart = a0;
-    if (!progEnd || a1 > progEnd) progEnd = a1;
-  }
-  // 进度工时：按工序实际窗×日工时，避免多人重复累加
-  const actualHours = ops.reduce((n, o) => {
-    const a0 = o.actual_start?.slice(0, 10);
-    if (!a0) return n;
-    const a1 =
-      o.actual_end?.slice(0, 10) ||
-      (o.status === "running" || o.status === "paused" ? TODAY_ISO() : a0);
-    const days = Math.max(1, dayjs(a1).diff(dayjs(a0), "day") + 1);
-    return n + days * (o.hours_per_day ?? 8);
-  }, 0);
-
-  const gap = ops.reduce((n, o) => n + (o.staffing_gap || 0), 0);
-  const pct =
-    plannedHours > 0 ? Math.min(100, Math.round((actualHours / plannedHours) * 100)) : 0;
+  const actualStats = collectActualDayShiftStats(opts.actualRow);
+  const hasActual = actualStats.shiftCount > 0 || actualStats.personCount > 0;
 
   return (
-    <div style={{ lineHeight: 1.55, maxWidth: 320, fontSize: 12 }}>
+    <div style={{ lineHeight: 1.55, maxWidth: 400, fontSize: 12 }}>
       <div style={{ fontSize: 13 }}>
         <b>{title}</b>
       </div>
       <div>{subtitle}</div>
-      <div style={{ marginTop: 4 }}>
-        交期 {shortDate(row.due_date)} · 剩余 {remaining} 道工序
-      </div>
-      <div>
-        计划 {shortDate(planStart)}～{shortDate(planEnd)} · 共{" "}
-        {Math.round(plannedHours * 10) / 10}h（日 {hpdHint}h）
-      </div>
-      <EffortSection title="计划人员" blocks={planBlocks} />
-      <EffortSection title="实际" blocks={actualBlocks} />
       <div style={{ marginTop: 6 }}>
-        进度{" "}
-        {progStart
-          ? `${shortDate(progStart)}～${shortDate(progEnd)} · ${Math.round(actualHours * 10) / 10}h / ${Math.round(plannedHours * 10) / 10}h（${pct}%）`
-          : `— · 0h / ${Math.round(plannedHours * 10) / 10}h`}
+        计划 {formatDateRangeFull(planStart, planEnd)}
+        <br />
+        {formatDayShiftBrief(planStats)}
       </div>
-      <div>
-        缺编 {gap} / 冲突 {opts.conflictCount}
+      <div style={{ marginTop: 4 }}>
+        实际{" "}
+        {hasActual ? (
+          <>
+            {formatDateRangeFull(actualStats.start, actualStats.end)}
+            <br />
+            {formatDayShiftBrief(actualStats)}
+          </>
+        ) : (
+          "—"
+        )}
+      </div>
+      <div style={{ marginTop: 4 }}>
+        进度 {formatDayShiftProgress(actualStats, planStats)}
       </div>
     </div>
   );
@@ -510,7 +437,7 @@ function buildDayCellTip(
       </div>
       {showDragHint ? (
         <div style={{ marginTop: 4, opacity: 0.85, fontSize: 12 }}>
-          拖中间改期；左右边缘拉宽/缩短
+          拖动改期；改时长请点开工序编辑
         </div>
       ) : null}
     </div>
@@ -609,13 +536,19 @@ function toDateStr(value: string | Dayjs | null | undefined): string | undefined
 const TODAY_ISO = () => dayjs().format("YYYY-MM-DD");
 
 export default function GanttPage() {
-  const [horizon, setHorizon] = useState<"focus" | "all">("focus");
-  const { data, loading, refresh, setData } = useRequest(() => fetchGantt(horizon), {
+  const { data, loading, refresh, setData } = useRequest(() => fetchGantt("all"), {
     immediate: true,
-    deps: [horizon],
   });
   const [searchParams, setSearchParams] = useSearchParams();
   const [sourceFilter, setSourceFilter] = useState<string | undefined>();
+  const [opNameFilter, setOpNameFilter] = useState<string | undefined>();
+  const [personFilter, setPersonFilter] = useState<string | undefined>();
+  const [dateRangeFilter, setDateRangeFilter] = useState<[Dayjs, Dayjs] | null>(null);
+  /** 排序条件；「当天有任务」时升降序置灰 */
+  const [sortField, setSortField] = useState<
+    "default" | "plan_start" | "plan_end" | "duration"
+  >("default");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [dragState, setDragState] = useState<{
     opId: string;
     fromDate: string;
@@ -626,22 +559,14 @@ export default function GanttPage() {
     fromDate: string;
     toDate: string;
     dayCount: number;
+    shiftId?: string;
   } | null>(null);
   const [detailRow, setDetailRow] = useState<GanttOrderRow | null>(null);
   const [fleetStatsOpen, setFleetStatsOpen] = useState(false);
-  const [resizeState, setResizeState] = useState<{
-    opId: string;
-    edge: "left" | "right";
-    runStart: string;
-    runEnd: string;
-    hoverDate: string;
-  } | null>(null);
-  const resizeStateRef = useRef(resizeState);
-  resizeStateRef.current = resizeState;
-  const suppressBarDragRef = useRef(false);
-  const dataRef = useRef(data);
-  dataRef.current = data;
   const [editing, setEditing] = useState<OperationItem | null>(null);
+  const [resolvePreview, setResolvePreview] = useState<ImpactPreview | null>(null);
+  const [resolvePreviewLoading, setResolvePreviewLoading] = useState(false);
+  const resolvePreviewSeq = useRef(0);
   const [addOpen, setAddOpen] = useState(false);
   const [impact, setImpact] = useState<ImpactPreview | null>(null);
   const [impactApplying, setImpactApplying] = useState(false);
@@ -651,7 +576,12 @@ export default function GanttPage() {
   const [replanPreviewing, setReplanPreviewing] = useState(false);
   const [replanAdvanced, setReplanAdvanced] = useState(false);
   const [ganttFullscreen, setGanttFullscreen] = useState(false);
-  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
+  /** null = 默认全部展开；Set 为用户显式展开集合（可为空=全折叠） */
+  const [expandedOrders, setExpandedOrders] = useState<Set<string> | null>(null);
+  /** 普通 / 全屏分页尺寸分开记 */
+  const [pageSizeNormal, setPageSizeNormal] = useState(20);
+  const [pageSizeFs, setPageSizeFs] = useState(50);
+  const [ganttPage, setGanttPage] = useState(1);
   const [viewportH, setViewportH] = useState(
     () => (typeof window !== "undefined" ? window.innerHeight : 800),
   );
@@ -691,27 +621,47 @@ export default function GanttPage() {
   const axis = data?.axis;
   const sandboxActive = !!data?.sandbox?.active;
 
+  /** 默认滚到「昨天」左缘，视口里是昨天+今天；固定列不计入 scrollLeft */
   const scrollGanttToToday = () => {
-    const target = axis?.scroll_to || TODAY_ISO();
-    const idx = dates.indexOf(target);
-    if (idx < 0) return;
+    const today = axis?.scroll_to || TODAY_ISO();
+    const yesterday = dayjs(today).subtract(1, "day").format("YYYY-MM-DD");
     const root = ganttScrollRef.current;
     if (!root) return;
     const body =
       root.querySelector<HTMLElement>(".ant-table-body") ||
       root.querySelector<HTMLElement>(".ant-table-content");
     if (!body) return;
-    const leftCol = 248 + 96;
-    const colW = 128;
-    body.scrollLeft = Math.max(0, leftCol + idx * colW - colW * 2);
+
+    const segs = data?.day_segments ?? [];
+    const multi = segs.length > 1;
+    // 与表头日列宽一致（相对旧版加宽一倍）
+    const oneSegW = multi ? Math.max(144, Math.floor(400 / Math.max(segs.length, 1))) : 256;
+    const dayW = multi ? oneSegW * segs.length : 256;
+    const anchorIso = dates.includes(yesterday) ? yesterday : today;
+    const anchor = dates.indexOf(anchorIso);
+    if (anchor < 0) return;
+
+    // 优先按表头实测对齐，避免多班/实际列宽偏差滚到空白历史
+    const th = body
+      .closest(".ant-table")
+      ?.querySelector<HTMLElement>(
+        `.ant-table-thead th[data-gantt-date="${anchorIso}"]`,
+      );
+    if (th) {
+      const bodyRect = body.getBoundingClientRect();
+      const thRect = th.getBoundingClientRect();
+      body.scrollLeft = Math.max(0, body.scrollLeft + (thRect.left - bodyRect.left));
+      return;
+    }
+    body.scrollLeft = Math.max(0, anchor * dayW);
   };
 
   useEffect(() => {
     if (!dates.length || !axis?.scroll_to) return;
-    const t = window.setTimeout(() => scrollGanttToToday(), 80);
+    const t = window.setTimeout(() => scrollGanttToToday(), 120);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 数据刷新后滚到今天
-  }, [axis?.scroll_to, dates.length, ganttFullscreen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 数据刷新后滚到昨天/今天
+  }, [axis?.scroll_to, dates.length, ganttFullscreen, data?.day_segments?.length]);
 
   const schedulableOrders = useMemo(
     () => (data?.order_options ?? []).filter((o) => (o.unscheduled_count ?? 0) > 0),
@@ -738,16 +688,22 @@ export default function GanttPage() {
     return ids;
   }, [data?.rows]);
 
+  const isOrderExpanded = (orderId: string | undefined | null) => {
+    if (!orderId) return false;
+    if (expandedOrders === null) return true;
+    return expandedOrders.has(orderId);
+  };
+
   const toggleOrderExpand = (orderId: string) => {
     setExpandedOrders((prev) => {
-      const next = new Set(prev);
+      const next = new Set(prev === null ? allOrderIds : prev);
       if (next.has(orderId)) next.delete(orderId);
       else next.add(orderId);
       return next;
     });
   };
 
-  const expandAllOrders = () => setExpandedOrders(new Set(allOrderIds));
+  const expandAllOrders = () => setExpandedOrders(null);
   const collapseAllOrders = () => setExpandedOrders(new Set());
 
   const selectedOrder: GanttOption | undefined = useMemo(
@@ -780,17 +736,207 @@ export default function GanttPage() {
     return { release, hold };
   }, [selectedOrder, scheduleHorizon, scheduleStartWatch]);
 
-  const rows = useMemo(() => {
+  const filterRange = useMemo(() => {
+    if (!dateRangeFilter?.[0] || !dateRangeFilter?.[1]) return null;
+    return {
+      start: dateRangeFilter[0].format("YYYY-MM-DD"),
+      end: dateRangeFilter[1].format("YYYY-MM-DD"),
+    };
+  }, [dateRangeFilter]);
+
+  const opMatchesFilters = (op: OperationItem) => {
+    if (opNameFilter && op.name !== opNameFilter) return false;
+    if (personFilter) {
+      const ids = op.assignee_ids?.length
+        ? op.assignee_ids
+        : op.assignee_id
+          ? [op.assignee_id]
+          : [];
+      const inSeg = (op.plan_segments ?? []).some(
+        (s) =>
+          s.person_id === personFilter ||
+          (s.person_ids || []).includes(personFilter),
+      );
+      if (!ids.includes(personFilter) && !inSeg) return false;
+    }
+    if (filterRange) {
+      const ps = (op.plan_start || op.bar_start || "").slice(0, 10);
+      const pe = (op.plan_end || op.bar_end || ps).slice(0, 10);
+      if (!ps || !rangesOverlap(ps, pe, filterRange.start, filterRange.end)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const opNameOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const r of data?.rows ?? []) {
+      for (const o of r.operations ?? []) {
+        if (o.name) names.add(o.name);
+      }
+      for (const cells of Object.values(r.cells || {})) {
+        for (const o of cells) if (o.name) names.add(o.name);
+      }
+    }
+    return [...names]
+      .sort((a, b) => a.localeCompare(b, "zh"))
+      .map((n) => ({ value: n, label: n }));
+  }, [data?.rows]);
+
+  const personFilterOptions = useMemo(() => {
+    return [...(data?.persons ?? [])]
+      .sort((a, b) => (a.name || "").localeCompare(b.name || "", "zh"))
+      .map((p) => ({
+        value: p.id,
+        label: `${p.name}${p.code ? `（${p.code}）` : ""}`,
+      }));
+  }, [data?.persons]);
+
+  /** 日期轴：有时间段筛选则只显示该区间内的列 */
+  const visibleDates = useMemo(() => {
+    const all = data?.dates ?? [];
+    if (!filterRange) return all;
+    return all.filter((d) => d >= filterRange.start && d <= filterRange.end);
+  }, [data?.dates, filterRange]);
+
+  const ganttPageSize = ganttFullscreen ? pageSizeFs : pageSizeNormal;
+  const ganttPageSizeOptions = ganttFullscreen ? [50, 100, 200] : [20, 50, 100];
+
+  /** 筛选 + 排序后的计划行（分页按订单计） */
+  const sortedPlanRows = useMemo(() => {
     let list = data?.rows ?? [];
     if (sourceFilter) list = list.filter((r) => r.source_type === sourceFilter);
-    // 折叠：每订单只占一行（隐藏实绩行）；展开才出计划+实绩双行
-    return list.filter((r) => {
-      if (r.row_kind === "actual") {
-        return !!(r.order_id && expandedOrders.has(r.order_id));
+    const hasOpFilters = !!(opNameFilter || personFilter || filterRange);
+    if (hasOpFilters) {
+      list = list.filter((r) => {
+        const ops = r.operations ?? [];
+        const cellOps = Object.values(r.cells || {}).flat();
+        const pool = ops.length ? ops : cellOps;
+        if (!pool.length) return !opNameFilter && !personFilter;
+        return pool.some((o) => opMatchesFilters(o));
+      });
+    }
+
+    const today = axis?.today || TODAY_ISO();
+    const plans = list.filter((r) => r.row_kind !== "actual");
+
+    const metaOf = (row: GanttOrderRow) => {
+      const ops = row.operations ?? [];
+      let planStart = (row.plan_start || "").slice(0, 10);
+      let planEnd = (row.estimated_end || "").slice(0, 10);
+      let duration = 0;
+      let todayCount = (row.cells?.[today] || []).length;
+      let coverToday = 0;
+      for (const o of ops) {
+        const ps = (o.plan_start || "").slice(0, 10);
+        const pe = (o.plan_end || ps).slice(0, 10);
+        if (ps && (!planStart || ps < planStart)) planStart = ps;
+        if (pe && (!planEnd || pe > planEnd)) planEnd = pe;
+        duration += o.segment_day_sum || o.duration_days || 0;
+        if (ps && pe && ps <= today && today <= pe) coverToday += 1;
       }
-      return true;
+      if (!todayCount) todayCount = coverToday;
+      return {
+        planStart: planStart || "9999-99-99",
+        planEnd: planEnd || "9999-99-99",
+        duration,
+        todayCount,
+        due: (row.due_date || "").slice(0, 10) || "9999-99-99",
+        code: row.order_code || row.order_id || "",
+      };
+    };
+
+    const cmpStr = (a: string, b: string, dir: 1 | -1) =>
+      a === b ? 0 : a < b ? -dir : dir;
+    const cmpNum = (a: number, b: number, dir: 1 | -1) =>
+      a === b ? 0 : a < b ? -dir : dir;
+
+    return [...plans].sort((ra, rb) => {
+      const a = metaOf(ra);
+      const b = metaOf(rb);
+      if (sortField === "default") {
+        const t = cmpNum(a.todayCount, b.todayCount, -1);
+        if (t) return t;
+        const d = cmpStr(a.due, b.due, 1);
+        if (d) return d;
+        return cmpStr(a.code, b.code, 1);
+      }
+      const dir: 1 | -1 = sortDir === "asc" ? 1 : -1;
+      if (sortField === "plan_start") {
+        const s = cmpStr(a.planStart, b.planStart, dir);
+        if (s) return s;
+        return cmpStr(a.code, b.code, 1);
+      }
+      if (sortField === "plan_end") {
+        const s = cmpStr(a.planEnd, b.planEnd, dir);
+        if (s) return s;
+        return cmpStr(a.code, b.code, 1);
+      }
+      if (sortField === "duration") {
+        const s = cmpNum(a.duration, b.duration, dir);
+        if (s) return s;
+        return cmpStr(a.code, b.code, 1);
+      }
+      return cmpStr(a.code, b.code, 1);
     });
-  }, [data?.rows, sourceFilter, expandedOrders]);
+  }, [
+    data?.rows,
+    sourceFilter,
+    opNameFilter,
+    personFilter,
+    filterRange,
+    sortField,
+    sortDir,
+    axis?.today,
+  ]);
+
+  // 筛排序变化回到第 1 页；切全屏保留页码但校正越界
+  useEffect(() => {
+    setGanttPage(1);
+  }, [sourceFilter, opNameFilter, personFilter, filterRange, sortField, sortDir]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(sortedPlanRows.length / ganttPageSize) || 1);
+    if (ganttPage > maxPage) setGanttPage(maxPage);
+  }, [sortedPlanRows.length, ganttPageSize, ganttPage, ganttFullscreen]);
+
+  useEffect(() => {
+    const root = ganttScrollRef.current;
+    if (!root) return;
+    root.scrollTop = 0;
+    const body = root.querySelector(".ant-table-body");
+    if (body) (body as HTMLElement).scrollTop = 0;
+  }, [ganttPage, ganttPageSize, ganttFullscreen]);
+
+  const rows = useMemo(() => {
+    const start = (ganttPage - 1) * ganttPageSize;
+    const pagePlans = sortedPlanRows.slice(start, start + ganttPageSize);
+    const actualMap = new Map<string, GanttOrderRow>();
+    for (const r of data?.rows ?? []) {
+      if (r.row_kind === "actual" && r.order_id) actualMap.set(r.order_id, r);
+    }
+    const out: GanttOrderRow[] = [];
+    for (const p of pagePlans) {
+      out.push(p);
+      const oid = p.order_id;
+      if (oid && isOrderExpanded(oid)) {
+        const act = actualMap.get(oid);
+        const hasActual =
+          !!act &&
+          ((act.operations?.length ?? 0) > 0 ||
+            Object.values(act.cells || {}).some((c) => (c?.length ?? 0) > 0));
+        if (hasActual) out.push(act);
+      }
+    }
+    return out;
+  }, [
+    sortedPlanRows,
+    ganttPage,
+    ganttPageSize,
+    expandedOrders,
+    data?.rows,
+  ]);
 
   /** 汇总统计用：全部计划行（抽屉内再筛） */
   const statsPlanRows = useMemo(() => {
@@ -820,16 +966,6 @@ export default function GanttPage() {
   }, [data?.rows]);
 
   const personNameById = useMemo(() => personNameMap(data?.persons), [data?.persons]);
-
-  const conflictCountByOrder = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const c of data?.conflicts ?? []) {
-      const code = c.order_code;
-      if (!code) continue;
-      map.set(code, (map.get(code) || 0) + 1);
-    }
-    return map;
-  }, [data?.conflicts]);
 
   const openImpact = (preview: ImpactPreview, apply: () => Promise<void>) => {
     setImpact(preview);
@@ -918,16 +1054,14 @@ export default function GanttPage() {
     onSuccess: (next) => setData(next),
   });
 
-  const { mutate: doResetDemo, loading: resettingDemo } = useMutation(resetSchedulingDemo, {
-    successMessage: (r) => r?.message || "已恢复演示排产",
-    onSuccess: async () => {
-      await refresh();
-    },
-  });
-
   const history = data?.history;
 
-  const applyWholeShift = async (op: OperationItem, fromDate: string, toDate: string) => {
+  const applyWholeShift = async (
+    op: OperationItem,
+    fromDate: string,
+    toDate: string,
+    shiftId?: string,
+  ) => {
     const today = TODAY_ISO();
     const oldStart = (op.plan_start || fromDate).slice(0, 10);
     if (oldStart < today) {
@@ -937,26 +1071,32 @@ export default function GanttPage() {
       return;
     }
     const delta = dayjs(toDate).diff(dayjs(fromDate), "day");
-    if (delta === 0) return;
+    const shiftChanged = !!(shiftId && shiftId !== op.shift_id);
+    if (delta === 0 && !shiftChanged) return;
     const newStart = dayjs(oldStart).add(delta, "day").format("YYYY-MM-DD");
     if (newStart < today) {
       message.warning("整段平移后会落到今天之前，已取消");
       return;
     }
-    const preview = await previewMoveGanttTask(op.id, {
+    const payload = {
       plan_start: newStart,
-      cascade: true,
-    });
+      cascade: true as const,
+      resolve_roster: true as const,
+      ...(shiftId ? { shift_id: shiftId } : {}),
+    };
+    const preview = await previewMoveGanttTask(op.id, payload);
     openImpact(preview, async () => {
-      const result = await moveGanttTask(op.id, { plan_start: newStart, cascade: true });
+      const result = await moveGanttTask(op.id, payload);
       const active = activeBusyHints(result);
       if (active.length) {
         message.warning(active.map((h) => h.message).join("；"));
+      } else if (delta === 0 && shiftChanged) {
+        message.success("已换到目标班段，并按排班重派责任人");
       } else {
         message.success(
           delta > 0
-            ? `整段后移 ${delta} 天，后置工序已顺延`
-            : `整段前移 ${-delta} 天，后置工序已顺延`,
+            ? `整段后移 ${delta} 天，已按排班重派，后置已顺延`
+            : `整段前移 ${-delta} 天，已按排班重派，后置已顺延`,
         );
       }
       await refresh();
@@ -987,12 +1127,14 @@ export default function GanttPage() {
       plan_start: planStart,
       plan_segments: segs,
       cascade: true,
+      only_fill_empty: true,
     });
     openImpact(preview, async () => {
       const result = await moveGanttTask(op.id, {
         plan_start: planStart,
         plan_segments: segs,
         cascade: true,
+        only_fill_empty: true,
       });
       const active = activeBusyHints(result);
       if (active.length) {
@@ -1001,14 +1143,19 @@ export default function GanttPage() {
         message.success(
           fromDate === toDate
             ? "日期未变"
-            : `已把 ${fromDate.slice(5)} 拆开挪到 ${toDate.slice(5)}`,
+            : `已把 ${fromDate.slice(5)} 拆开挪到 ${toDate.slice(5)}，新日已按排班派人`,
         );
       }
       await refresh();
     });
   };
 
-  const onDropToDate = async (opId: string, toDate: string, fromDate: string) => {
+  const onDropToDate = async (
+    opId: string,
+    toDate: string,
+    fromDate: string,
+    shiftId?: string,
+  ) => {
     const today = TODAY_ISO();
     if (toDate < today) {
       message.warning("历史日期已冻结，不能拖到今天之前");
@@ -1022,9 +1169,15 @@ export default function GanttPage() {
     }
     const days = expandOpPlanDays(op);
     const dayCount = days.length;
+    const shiftChanged = !!(shiftId && shiftId !== op.shift_id);
     try {
-      if (dayCount <= 1 || fromDate === toDate) {
-        await applyWholeShift(op, fromDate || op.plan_start?.slice(0, 10) || toDate, toDate);
+      if (dayCount <= 1 || fromDate === toDate || shiftChanged) {
+        await applyWholeShift(
+          op,
+          fromDate || op.plan_start?.slice(0, 10) || toDate,
+          toDate,
+          shiftId,
+        );
       } else {
         // 连续多天：先问整段一起移，还是只挪抓取日
         setDragChoice({
@@ -1033,6 +1186,7 @@ export default function GanttPage() {
           fromDate,
           toDate,
           dayCount,
+          shiftId,
         });
       }
     } catch (e) {
@@ -1050,7 +1204,7 @@ export default function GanttPage() {
     if (!op) return;
     try {
       if (mode === "whole") {
-        await applyWholeShift(op, choice.fromDate, choice.toDate);
+        await applyWholeShift(op, choice.fromDate, choice.toDate, choice.shiftId);
       } else {
         await applySingleDayMove(op, choice.fromDate, choice.toDate);
       }
@@ -1058,97 +1212,6 @@ export default function GanttPage() {
       message.error(e instanceof Error ? e.message : "预览失败");
     }
   };
-
-  const finishBarResize = async () => {
-    const st = resizeStateRef.current;
-    setResizeState(null);
-    suppressBarDragRef.current = false;
-    if (!st) return;
-    const target = (st.hoverDate || "").slice(0, 10);
-    if (!target) return;
-    const op = dataRef.current?.tasks?.find((t) => t.id === st.opId);
-    if (!op) return;
-    const today = TODAY_ISO();
-    const payload = buildAfterBarResize(
-      op,
-      st.edge,
-      st.runStart,
-      st.runEnd,
-      target,
-      today,
-    );
-    if (!payload) {
-      if (st.edge === "left" && target < today) {
-        message.warning("左缘不能拉到今天之前");
-      }
-      return;
-    }
-    try {
-      const body = {
-        plan_start: payload.plan_start,
-        duration_days: payload.duration_days,
-        ...(payload.plan_segments ? { plan_segments: payload.plan_segments } : {}),
-        cascade: true,
-      };
-      const preview = await previewMoveGanttTask(op.id, body);
-      openImpact(preview, async () => {
-        const result = await moveGanttTask(op.id, body);
-        const active = activeBusyHints(result);
-        if (active.length) {
-          message.warning(active.map((h) => h.message).join("；"));
-        } else {
-          const endIso = dayjs(payload.plan_start)
-            .add(payload.duration_days - 1, "day")
-            .format("YYYY-MM-DD");
-          message.success(`已调整为 ${payload.plan_start} ~ ${endIso}（${payload.duration_days} 天）`);
-        }
-        await refresh();
-      });
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "预览失败");
-    }
-  };
-
-  const startBarResize = (
-    op: OperationItem,
-    edge: "left" | "right",
-    e: React.PointerEvent,
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    suppressBarDragRef.current = true;
-    const runStart = (op.bar_start || op.plan_start || "").slice(0, 10);
-    const runEnd = (op.bar_end || op.plan_end || runStart).slice(0, 10);
-    if (!runStart) return;
-    setDragState(null);
-    setResizeState({
-      opId: op.id,
-      edge,
-      runStart,
-      runEnd,
-      hoverDate: edge === "left" ? runStart : runEnd,
-    });
-  };
-
-  useEffect(() => {
-    if (!resizeState) return;
-    const onUp = () => {
-      void finishBarResize();
-    };
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
-        setResizeState(null);
-        suppressBarDragRef.current = false;
-      }
-    };
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("keydown", onKey);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!resizeState]);
 
   const openScheduleForOrder = (orderId: string) => {
     addForm.setFieldsValue({
@@ -1220,79 +1283,319 @@ export default function GanttPage() {
       digest.overload_day_count > 0 ||
       digest.delay_count > 0);
 
-  const openEdit = (op: OperationItem) => {
-    setEditing(op);
-    const segs = (op.plan_segments ?? []).filter((s) => s.start);
-    form.setFieldsValue({
-      plan_start: op.plan_start ? dayjs(op.plan_start.slice(0, 10)) : dayjs(),
-      duration_days: op.duration_days || op.segment_day_sum || 2,
-      hours_per_day: op.hours_per_day ?? 8,
-      slot: op.slot || "full",
-      shift_id: op.shift_id || undefined,
-      assignee_ids: op.assignee_ids || (op.assignee_id ? [op.assignee_id] : []),
-      plan_segments: segs.map((s) => ({
-        person_id: s.person_id || undefined,
-        range: [dayjs(s.start.slice(0, 10)), dayjs((s.end || s.start).slice(0, 10))],
-      })),
-    });
+  const buildEditPayload = (
+    values: {
+      shift_id?: string;
+      plan_segments?: EditSegForm[];
+    },
+    opts?: { forSuggest?: boolean },
+  ) => {
+    const forSuggest = !!opts?.forSuggest;
+    const segs = (values.plan_segments ?? [])
+      .map((s, i) => {
+        const { start, end } = segStartEnd(s);
+        if (!start) return null;
+        const pids = forSuggest ? [] : [...(s.person_ids || [])];
+        const eids = forSuggest ? [] : [...(s.equipment_ids || [])];
+        const hc = Math.max(
+          1,
+          Math.min(8, Number(s.required_headcount) || pids.length || 1),
+        );
+        const eq = Math.max(
+          1,
+          Math.min(8, Number(s.required_equipment) || eids.length || 1),
+        );
+        return {
+          id: `seg-${i + 1}`,
+          person_id: (pids[0] || null) as string | null,
+          person_ids: pids,
+          equipment_ids: eids,
+          required_headcount: hc,
+          required_equipment: eq,
+          start,
+          end: end || start,
+        };
+      })
+      .filter(Boolean) as Array<{
+      id: string;
+      person_id: string | null;
+      person_ids: string[];
+      equipment_ids: string[];
+      required_headcount: number;
+      required_equipment: number;
+      start: string;
+      end: string;
+    }>;
+    if (!segs.length) return null;
+    const maxHc = Math.max(...segs.map((s) => s.required_headcount));
+    const allPids = [...new Set(segs.flatMap((s) => s.person_ids))];
+    const allEids = [...new Set(segs.flatMap((s) => s.equipment_ids))];
+    const needResolve =
+      forSuggest || segs.some((s) => s.person_ids.length < s.required_headcount);
+    const needAutoEq =
+      forSuggest || segs.some((s) => s.equipment_ids.length < s.required_equipment);
+    return {
+      plan_start: segs.map((s) => s.start).sort()[0],
+      shift_id: values.shift_id,
+      required_headcount: maxHc,
+      plan_segments: segs,
+      assignee_ids: !needResolve && allPids.length ? allPids : undefined,
+      equipment_id: !needAutoEq && allEids.length ? allEids[0] : undefined,
+      resolve_roster: needResolve,
+      auto_equipment: needAutoEq,
+      cascade: true,
+    };
   };
 
-  const { mutate: saveEdit, loading: saving } = useMutation(
-    async (values: {
-      plan_start: Dayjs | string;
-      duration_days: number;
-      hours_per_day?: number;
-      shift_id?: string;
-      assignee_ids?: string[];
-      plan_segments?: Array<{
-        person_id?: string;
-        range?: [Dayjs, Dayjs] | Dayjs[];
-      }>;
-    }) => {
-      if (!editing) return undefined;
-      const segs = (values.plan_segments ?? [])
-        .map((s, i) => {
-          const r = s.range;
-          const start = r?.[0] ? toDateStr(r[0]) : undefined;
-          const end = r?.[1] ? toDateStr(r[1]) : start;
-          if (!start) return null;
+  const openEdit = (op: OperationItem) => {
+    // 先清表单错误/旧值，避免弹窗刚打开时 Form.List 红字或上一次缺口闪一下
+    resolvePreviewSeq.current += 1;
+    setResolvePreview(null);
+    setResolvePreviewLoading(false);
+    form.resetFields();
+    form.setFieldsValue({
+      shift_id: op.shift_id || undefined,
+      plan_segments: collapseOpToEditFormSegments(op),
+    });
+    setEditing(op);
+  };
+
+  const watchShiftId = Form.useWatch("shift_id", form);
+  const watchPlanSegs = Form.useWatch("plan_segments", form) as EditSegForm[] | undefined;
+
+  /** 仅日期/人数/设备数/班次变化才触发自动预览（改人手选不重跑） */
+  const suggestDeps = useMemo(
+    () =>
+      JSON.stringify({
+        shift: watchShiftId || "",
+        rows: (watchPlanSegs || []).map((s) => {
+          const { start, end } = segStartEnd(s);
           return {
-            id: `seg-${i + 1}`,
-            person_id: s.person_id || null,
             start,
-            end: end || start,
+            end,
+            hc: Number(s.required_headcount) || 1,
+            eq: Number(s.required_equipment) || 1,
           };
+        }),
+      }),
+    [watchShiftId, watchPlanSegs],
+  );
+
+  const openLeaves = useMemo(
+    () => (data?.leaves ?? []).filter((lv) => (lv.status || "open") !== "closed"),
+    [data?.leaves],
+  );
+
+  /** 按计划段日期标注请假；11 号请假不应在 12–13 段上显示「请假」或禁用。 */
+  const personOptionsForRange = (start: string, end: string) => {
+    const skillId = editing?.skill_id;
+    const list = [...(data?.persons ?? [])].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "zh"),
+    );
+    const leaveHint = (personId: string) => {
+      if (!start || !end) return "";
+      const hits = openLeaves.filter(
+        (lv) =>
+          lv.person_id === personId &&
+          lv.start_date &&
+          lv.end_date &&
+          rangesOverlap(start, end, lv.start_date.slice(0, 10), lv.end_date.slice(0, 10)),
+      );
+      if (!hits.length) return "";
+      const win = hits
+        .map((lv) => {
+          const a = lv.start_date.slice(5, 10);
+          const b = lv.end_date.slice(5, 10);
+          return a === b ? a : `${a}~${b}`;
         })
-        .filter(Boolean) as Array<{
-        id: string;
-        person_id: string | null;
-        start: string;
-        end: string;
-      }>;
-      const planStart =
-        segs.length > 0
-          ? segs.map((s) => s.start).sort()[0]
-          : toDateStr(values.plan_start);
-      if (!planStart) throw new Error("请选择开始日期或时间段");
-      const payload = {
-        plan_start: planStart,
-        duration_days: values.duration_days,
-        hours_per_day: values.hours_per_day ?? 8,
-        shift_id: values.shift_id,
-        assignee_ids: values.assignee_ids ?? [],
-        plan_segments: segs,
-        cascade: true,
+        .join("、");
+      const coversAll = hits.some(
+        (lv) =>
+          lv.start_date.slice(0, 10) <= start && lv.end_date.slice(0, 10) >= end,
+      );
+      return coversAll ? ` · 请假(${win})` : ` · 部分日请假(${win})`;
+    };
+    const toOpt = (p: PersonItem) => {
+      const hint = leaveHint(p.id);
+      const coversAll = hint.startsWith(" · 请假(");
+      return {
+        value: p.id,
+        label: `${p.name}${p.skill_names?.length ? `（${p.skill_names.join("、")}）` : ""}${hint}`,
+        // 仅当请假覆盖本段全部日期才禁用；部分重叠仍可选（派非请假日）
+        disabled: coversAll,
       };
+    };
+    if (!skillId) return list.map(toOpt);
+    const matched = list.filter((p) => (p.skill_ids || []).includes(skillId));
+    const others = list.filter((p) => !(p.skill_ids || []).includes(skillId));
+    return [
+      {
+        label: `符合技能${editing?.skill_name ? ` · ${editing.skill_name}` : ""}`,
+        options: matched.map(toOpt),
+      },
+      ...(others.length
+        ? [{ label: "其他人员", options: others.map(toOpt) }]
+        : []),
+    ];
+  };
+
+  const equipmentOptions = useMemo(() => {
+    const pool = new Set(editing?.equipment_pool_ids || []);
+    const list = [...(data?.equipments ?? [])].filter((e) => e.status !== "disabled");
+    list.sort((a, b) => (a.name || "").localeCompare(b.name || "", "zh"));
+    const toOpt = (e: EquipmentItem) => ({
+      value: e.id,
+      label: `${e.name}${e.code ? `（${e.code}）` : ""}`,
+    });
+    if (!pool.size) return list.map(toOpt);
+    const inPool = list.filter((e) => pool.has(e.id));
+    const outPool = list.filter((e) => !pool.has(e.id));
+    return [
+      { label: "模板设备池", options: inPool.map(toOpt) },
+      ...(outPool.length
+        ? [{ label: "其他设备", options: outPool.map(toOpt) }]
+        : []),
+    ];
+  }, [data?.equipments, editing?.equipment_pool_ids]);
+
+  const equipmentNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of data?.equipments ?? []) m.set(e.id, e.name);
+    return m;
+  }, [data?.equipments]);
+
+  useEffect(() => {
+    if (!editing) {
+      setResolvePreview(null);
+      return;
+    }
+    const values = {
+      shift_id: watchShiftId as string | undefined,
+      plan_segments: watchPlanSegs,
+    };
+    const payload = buildEditPayload(values, { forSuggest: true });
+    if (!payload || !payload.shift_id) {
+      setResolvePreview(null);
+      return;
+    }
+    const seq = ++resolvePreviewSeq.current;
+    setResolvePreviewLoading(true);
+    const timer = window.setTimeout(() => {
+      void previewMoveGanttTask(editing.id, payload)
+        .then((preview) => {
+          if (seq !== resolvePreviewSeq.current) return;
+          setResolvePreview(preview);
+          const resolved = preview.resolved_op?.plan_segments ?? [];
+          const cur = (form.getFieldValue("plan_segments") || []) as EditSegForm[];
+          let dirty = false;
+          const next = cur.map((row) => {
+            const { start, end } = segStartEnd(row);
+            if (!start) return row;
+            const dateKey = `${start}|${end}|${payload.shift_id}`;
+            const hc = Math.max(1, Number(row.required_headcount) || 1);
+            const eq = Math.max(1, Number(row.required_equipment) || 1);
+            const matched = resolved.filter((s) =>
+              rangesOverlap(
+                start,
+                end,
+                s.start.slice(0, 10),
+                (s.end || s.start).slice(0, 10),
+              ),
+            );
+            const suggestedPids = [
+              ...new Set(matched.flatMap((s) => s.person_ids || []).filter(Boolean)),
+            ] as string[];
+            const suggestedEids = [
+              ...new Set(
+                matched.flatMap((s) => s.equipment_ids || []).filter(Boolean),
+              ),
+            ] as string[];
+            let pids = [...(row.person_ids || [])];
+            let eids = [...(row.equipment_ids || [])];
+            const dateChanged = row._dateKey !== dateKey;
+            if (dateChanged || !pids.length) {
+              pids = suggestedPids.slice(0, hc);
+            } else if (pids.length < hc) {
+              for (const id of suggestedPids) {
+                if (pids.length >= hc) break;
+                if (!pids.includes(id)) pids.push(id);
+              }
+            } else if (pids.length > hc) {
+              pids = pids.slice(0, hc);
+            }
+            if (dateChanged || !eids.length) {
+              eids = suggestedEids.slice(0, eq);
+            } else if (eids.length < eq) {
+              for (const id of suggestedEids) {
+                if (eids.length >= eq) break;
+                if (!eids.includes(id)) eids.push(id);
+              }
+            } else if (eids.length > eq) {
+              eids = eids.slice(0, eq);
+            }
+            const same =
+              row._dateKey === dateKey &&
+              JSON.stringify(row.person_ids || []) === JSON.stringify(pids) &&
+              JSON.stringify(row.equipment_ids || []) === JSON.stringify(eids);
+            if (same) return row;
+            dirty = true;
+            return {
+              ...row,
+              start_date: dayjs(start),
+              end_date: dayjs(end),
+              person_ids: pids,
+              equipment_ids: eids,
+              _dateKey: dateKey,
+            };
+          });
+          if (dirty) form.setFieldsValue({ plan_segments: next });
+        })
+        .catch(() => {
+          if (seq !== resolvePreviewSeq.current) return;
+          setResolvePreview(null);
+        })
+        .finally(() => {
+          if (seq === resolvePreviewSeq.current) setResolvePreviewLoading(false);
+        });
+    }, 380);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- suggestDeps 已概括关键字段
+  }, [editing, suggestDeps]);
+
+  const { mutate: saveEdit, loading: saving } = useMutation(
+    async (values: { shift_id?: string; plan_segments?: EditSegForm[] }) => {
+      if (!editing) return undefined;
+      const payload = buildEditPayload(values);
+      if (!payload) throw new Error("请至少选择一段日期");
+      if (payload.required_headcount > 5) {
+        message.warning("人数偏多，请确认班次产能是否够用");
+      }
+      if (payload.plan_segments.some((s) => s.required_equipment > 3)) {
+        message.warning("设备数偏多，请确认模板设备池是否够用");
+      }
       const preview = await previewMoveGanttTask(editing.id, payload);
       openImpact(preview, async () => {
         const result = await moveGanttTask(editing.id, payload);
         const active = activeBusyHints(result);
+        const gap = result?.staffing_gap || 0;
+        const eqGap = result?.equipment_gap || 0;
         if (active.length) {
           message.warning(active.map((h) => h.message).join("；"));
+        } else if (gap > 0) {
+          message.warning(
+            `已保存，但仍缺 ${gap} 人/天（技能或排班不足），甘特会标缺编`,
+          );
+        } else if (eqGap > 0 || !result?.equipment_id) {
+          message.warning("已保存并派好人员，但设备不足（请检查模板设备池）");
         } else {
-          message.success("工序已更新");
+          const eqLabel =
+            result.equipment_names?.join("、") || result.equipment_name || "设备";
+          message.success(
+            `已保存：${result.assignee_name || "责任人"} · ${eqLabel}`,
+          );
         }
         setEditing(null);
+        setResolvePreview(null);
         await refresh();
       });
       return undefined;
@@ -1381,46 +1684,56 @@ export default function GanttPage() {
     },
   );
 
+  const daySegments: DaySegment[] = data?.day_segments ?? [];
+  const multiSeg = daySegments.length > 1;
+  /** 日列宽为旧版 2 倍；工序条高度为旧版一半 */
+  const DAY_COL_W = 256;
+  const OP_BAR_H = 22;
+  const segColWidth = multiSeg
+    ? Math.max(144, Math.floor(400 / Math.max(daySegments.length, 1)))
+    : DAY_COL_W;
+
   const columns = [
     {
-      title: "订单",
+      title: "订单 / 交货日期",
       key: "meta",
       fixed: "left" as const,
-      width: 248,
+      width: 280,
       render: (_: unknown, row: GanttOrderRow) => {
         const isActual = row.row_kind === "actual";
         const tip = buildOrderHoverTip(row, {
-          nameById: personNameById,
-          conflictCount: conflictCountByOrder.get(row.order_code) || 0,
+          actualRow: row.order_id ? actualRowByOrder.get(row.order_id) : null,
         });
-        const expanded = !!(row.order_id && expandedOrders.has(row.order_id));
+        const expanded = isOrderExpanded(row.order_id);
         const stripe = orderStripeIndex.get(row.order_id || "") ?? 0;
         const accent = stripe % 2 === 0 ? "#2563eb" : "#0f766e";
         if (isActual) {
           return (
             <div
               style={{
-                paddingLeft: 28,
-                color: "#4a5568",
-                lineHeight: "44px",
+                paddingLeft: 32,
+                color: "#64748b",
+                fontSize: 12,
+                lineHeight: `${OP_BAR_H + 8}px`,
                 borderLeft: `3px solid ${accent}`,
               }}
             >
-              <Tag>实绩</Tag>
-              <span style={{ fontSize: 12, color: "#718096" }}>只读</span>
+              └ 实绩
             </div>
           );
         }
         const titleText = row.order_code || row.order_name || "-";
         const subText = row.work_order_name || row.work_order_code || "";
+        const due = (row.due_date || "").slice(0, 10);
+        const overdue = !!due && due < (axis?.today || TODAY_ISO());
+        const canAct = row.editable !== false && !!row.order_id;
         return (
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: 2,
-              height: expanded ? undefined : 44,
-              minHeight: expanded ? 44 : undefined,
+              minHeight: expanded ? OP_BAR_H + 12 : 36,
               borderLeft: `3px solid ${accent}`,
               paddingLeft: 4,
               boxSizing: "border-box",
@@ -1478,51 +1791,82 @@ export default function GanttPage() {
                     {subText}
                   </div>
                 ) : null}
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontVariantNumeric: "tabular-nums",
+                    color: due ? (overdue ? "#c53030" : "#2d3748") : "#a0aec0",
+                    fontWeight: overdue ? 600 : 400,
+                    marginTop: 1,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {due || "—"}
+                </div>
               </div>
             </Tooltip>
+            {canAct ? (
+              <Space size={0} wrap style={{ flexShrink: 0 }}>
+                <Button
+                  type="link"
+                  size="small"
+                  style={{ paddingInline: 4 }}
+                  onClick={() => setDetailRow(row)}
+                >
+                  详情
+                </Button>
+                <DeleteAction
+                  title="删除 / 作废该订单？"
+                  content="无完工实绩则整单删除（含工单与工序）；若有进行中或已完工则作废并撤出甘特，实绩保留。"
+                  successMessage={false}
+                  onConfirm={() => doRemoveOrder(row.order_id!)}
+                  buttonProps={{ size: "small", type: "link", style: { paddingInline: 4 } }}
+                >
+                  删除
+                </DeleteAction>
+              </Space>
+            ) : null}
           </div>
         );
       },
     },
-    {
-      title: "操作",
-      key: "actions",
-      fixed: "left" as const,
-      width: 96,
-      render: (_: unknown, row: GanttOrderRow) => {
-        if (row.row_kind === "actual" || row.editable === false) {
-          return <span style={{ color: "#a0aec0", fontSize: 12 }}>—</span>;
-        }
-        if (!row.order_id) return null;
-        return (
-          <Space size={0} wrap>
-            <Button
-              type="link"
-              size="small"
-              style={{ paddingInline: 4 }}
-              onClick={() => setDetailRow(row)}
-            >
-              详情
-            </Button>
-            <DeleteAction
-              title="删除 / 作废该订单？"
-              content="无完工实绩则整单删除（含工单与工序）；若有进行中或已完工则作废并撤出甘特，实绩保留。"
-              successMessage={false}
-              onConfirm={() => doRemoveOrder(row.order_id!)}
-              buttonProps={{ size: "small", type: "link", style: { paddingInline: 4 } }}
-            >
-              删除
-            </DeleteAction>
-          </Space>
-        );
-      },
-    },
-    ...dates.map((d) => {
+    ...visibleDates.map((d) => {
       const headerHasDue = (data?.due_markers ?? []).some((m) => m.due_date?.slice(0, 10) === d);
       const isPastCol = d < TODAY_ISO();
       const isTodayCol = d === (axis?.today || TODAY_ISO());
+
+      const buildSegLeaf = (seg: DaySegment | null, segIndex = 0) => {
+      const familyId = seg?.family_id;
+      const dropShiftId = seg?.shift_id;
+      // 交期竖线只画在当日最后一班，避免白/中/夜各画一条且长短不一
+      const isLastSegOfDay =
+        !multiSeg || !seg || segIndex === daySegments.length - 1;
+      const matchFamily = (op: OperationItem) =>
+        !familyId || (op.shift_family_id || "sh-day") === familyId;
+      const matchFilters = (op: OperationItem) => opMatchesFilters(op);
       return {
-        title: (
+        title: multiSeg && seg ? (
+          <div
+            style={{
+              textAlign: "center",
+              fontSize: 11,
+              fontWeight: 600,
+              color: isPastCol ? "#a0aec0" : "#4a5568",
+              lineHeight: 1.2,
+            }}
+            title={[
+              seg.time_label,
+              seg.belong_day_label ||
+                (seg.belong_day_rule === "previous_day" ? "归属前一日" : "归属开班日"),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          >
+            {seg.name}
+            {seg.crosses_midnight ? "·跨" : ""}
+            {seg.belong_day_rule === "previous_day" ? "·前" : ""}
+          </div>
+        ) : (
           <div
             style={{
               textAlign: "center",
@@ -1553,14 +1897,22 @@ export default function GanttPage() {
             )}
           </div>
         ),
-        key: d,
-        width: 128,
+        key: familyId ? `${d}__${familyId}` : d,
+        width: segColWidth,
+        className: isLastSegOfDay ? "gantt-day-end" : undefined,
+        onHeaderCell: () => ({
+          "data-gantt-date": d,
+          className: isLastSegOfDay ? "gantt-day-end" : undefined,
+        }),
         onCell: () => ({
+          "data-gantt-date": d,
+          className: isLastSegOfDay ? "gantt-day-end" : undefined,
           onDragOver: (e: React.DragEvent) => {
             if (!isPastCol) e.preventDefault();
           },
           style: {
-            verticalAlign: "middle" as const,
+            // top：同行各日/班列顶对齐，避免 middle 把矮单元格里的工序条顶到中间显得高低不一
+            verticalAlign: "top" as const,
             position: "relative" as const,
             padding: "2px 0",
             background: isTodayCol ? "#e6f4ff" : isPastCol ? "#f7f8fa" : undefined,
@@ -1568,16 +1920,23 @@ export default function GanttPage() {
         }),
         render: (_: unknown, row: GanttOrderRow) => {
           const isActualRow = row.row_kind === "actual" || row.editable === false;
-          const orderExpanded = !!(row.order_id && expandedOrders.has(row.order_id));
+          const orderExpanded = isOrderExpanded(row.order_id);
           const isOrderDue = !!row.due_date && row.due_date.slice(0, 10) === d;
+          const showDueMark = isOrderDue && isLastSegOfDay;
           const DUE_GAP = 7;
-          const COLLAPSED_H = 44;
+          const COLLAPSED_H = Math.max(28, OP_BAR_H + 8);
 
           // —— 折叠：一单一行高度，工序画细线（计划虚线 / 实绩实线）——
           if (!orderExpanded && !isActualRow) {
-            const planCells = row.cells?.[d] || [];
-            const actualCells =
-              (row.order_id && actualRowByOrder.get(row.order_id)?.cells?.[d]) || [];
+            const planCells = (row.cells?.[d] || [])
+              .filter(matchFamily)
+              .filter(matchFilters);
+            const actualCells = (
+              (row.order_id && actualRowByOrder.get(row.order_id)?.cells?.[d]) ||
+              []
+            )
+              .filter(matchFamily)
+              .filter(matchFilters);
             type LineItem = { kind: "plan" | "actual"; op: OperationItem };
             const lines: LineItem[] = [
               ...planCells.map((op) => ({ kind: "plan" as const, op })),
@@ -1591,13 +1950,13 @@ export default function GanttPage() {
                 style={{
                   position: "relative",
                   height: COLLAPSED_H,
-                  padding: isOrderDue ? `0 ${DUE_GAP + 2}px 0 2px` : "0 2px",
+                  padding: showDueMark ? `0 ${DUE_GAP + 2}px 0 2px` : "0 2px",
                 }}
                 onClick={() => {
                   if (row.order_id) toggleOrderExpand(row.order_id);
                 }}
               >
-                {isOrderDue ? (
+                {showDueMark ? (
                   <Tooltip title={`交货日 ${formatDateLabel(row.due_date)} · ${row.order_code}`}>
                     <div
                       style={{
@@ -1613,9 +1972,6 @@ export default function GanttPage() {
                 ) : null}
                 {lines.map((line, i) => {
                   const op = line.op;
-                  const seg = op.segment || "single";
-                  const isStart = seg === "start" || seg === "single";
-                  const isEnd = seg === "end" || seg === "single";
                   const tip = buildDayCellTip(
                     op,
                     d,
@@ -1632,11 +1988,11 @@ export default function GanttPage() {
                         style={{
                           position: "absolute",
                           top: 4 + i * step,
-                          left: isStart ? 2 : -2,
-                          right: isOrderDue ? DUE_GAP : isEnd ? 2 : -2,
+                          left: 2,
+                          right: showDueMark ? DUE_GAP : 2,
                           height: lineH,
                           boxSizing: "border-box",
-                          borderRadius: 1,
+                          borderRadius: 2,
                           cursor: "pointer",
                           zIndex: 1,
                           ...(line.kind === "plan"
@@ -1658,62 +2014,30 @@ export default function GanttPage() {
             );
           }
 
-          let cells = row.cells?.[d] || [];
-          const BAR_H = 44;
-          const LANE_GAP = 4;
+          let cells = (row.cells?.[d] || [])
+            .filter(matchFamily)
+            .filter(matchFilters);
+          const BAR_H = OP_BAR_H;
+          const LANE_GAP = 2;
+          // 与 rowLanes 键一致（不按班拆），同工序跨天同一泳道，避免高低错位
           const laneKey = `${row.order_id || row.work_order_id || ""}:${row.row_kind || "plan"}`;
           const { laneOf, laneCount } = rowLanes.get(laneKey) ?? {
             laneOf: new Map<string, number>(),
             laneCount: Math.max(cells.length, 1),
           };
           const stackH = Math.max(1, laneCount) * BAR_H + Math.max(0, laneCount - 1) * LANE_GAP;
-          // 仅当本行含正在拉伸的工序时，才接收目标日（不影响其它行）
-          const rowHasResizeOp =
-            !!resizeState &&
-            !isActualRow &&
-            Object.values(row.cells || {})
-              .flat()
-              .some((op) => op.id === resizeState.opId);
-          const resizePreview =
-            rowHasResizeOp && resizeState
-              ? previewResizeRange(
-                  resizeState.edge,
-                  resizeState.runStart,
-                  resizeState.runEnd,
-                  resizeState.hoverDate,
-                  TODAY_ISO(),
-                )
-              : null;
-          const inOrigRun =
-            !!resizeState && d >= resizeState.runStart && d <= resizeState.runEnd;
-          const inPreviewRun =
-            !!resizePreview && d >= resizePreview.start && d <= resizePreview.end;
-          // 拉长到空白日：本格没有该工序 → 画新增虚影
-          const needAddGhost =
-            !!resizeState &&
-            rowHasResizeOp &&
-            inPreviewRun &&
-            !inOrigRun &&
-            !cells.some((op) => op.id === resizeState.opId);
-          const resizeLane =
-            resizeState && rowHasResizeOp ? (laneOf.get(resizeState.opId) ?? 0) : 0;
-          const ghostColor = "rgba(37,99,235,0.5)";
-          const showStack = cells.length > 0 || needAddGhost;
+          const showStack = cells.length > 0;
           return (
             <div
               style={{
                 position: "relative",
-                minHeight: showStack ? stackH + 8 : 40,
-                padding: isOrderDue ? `0 ${DUE_GAP + 2}px 0 2px` : "0 2px",
+                height: "100%",
+                minHeight: showStack ? stackH + 6 : 28,
+                padding: showDueMark ? `0 ${DUE_GAP + 2}px 0 2px` : "0 2px",
                 background: isActualRow ? "rgba(148,163,184,0.08)" : undefined,
               }}
               onDragOver={(e) => {
                 if (!isActualRow && !isPastCol) e.preventDefault();
-              }}
-              onPointerEnter={() => {
-                if (!resizeState || isActualRow || !rowHasResizeOp) return;
-                if (resizeState.edge === "left" && d < TODAY_ISO()) return;
-                setResizeState((s) => (s ? { ...s, hoverDate: d } : s));
               }}
               onDrop={() => {
                 if (isActualRow) {
@@ -1727,17 +2051,17 @@ export default function GanttPage() {
                   return;
                 }
                 if (dragState) {
-                  void onDropToDate(dragState.opId, d, dragState.fromDate);
+                  void onDropToDate(dragState.opId, d, dragState.fromDate, dropShiftId);
                 }
               }}
             >
-              {isOrderDue && !isActualRow ? (
+              {showDueMark && !isActualRow ? (
                 <Tooltip title={`交货日 ${formatDateLabel(row.due_date)} · ${row.order_code}`}>
                   <div
                     style={{
                       position: "absolute",
-                      top: -2,
-                      bottom: -2,
+                      top: 0,
+                      bottom: 0,
                       right: 0,
                       width: 0,
                       borderRight: "2px dashed #ea580c",
@@ -1762,28 +2086,7 @@ export default function GanttPage() {
               ) : null}
               {showStack ? (
                 <div style={{ position: "relative", height: stackH }}>
-                  {needAddGhost ? (
-                    <div
-                      title="将占用（松手后确认）"
-                      style={{
-                        position: "absolute",
-                        top: resizeLane * (BAR_H + LANE_GAP),
-                        left: 0,
-                        right: 0,
-                        height: BAR_H,
-                        background: ghostColor,
-                        border: "1px dashed rgba(255,255,255,0.9)",
-                        borderRadius: 6,
-                        boxSizing: "border-box",
-                        pointerEvents: "none",
-                        zIndex: 2,
-                      }}
-                    />
-                  ) : null}
                   {cells.map((op) => {
-                    const seg = op.segment || "single";
-                    const isStart = seg === "start" || seg === "single";
-                    const isEnd = seg === "end" || seg === "single";
                     const lane = laneOf.get(op.id) ?? 0;
                     const barColor = isActualRow
                       ? "rgba(71,85,105,0.88)"
@@ -1796,48 +2099,6 @@ export default function GanttPage() {
                             : op.status === "running"
                               ? "rgba(22,163,74,0.85)"
                               : "rgba(37,99,235,0.85)";
-                    const tip = (
-                      <div style={{ lineHeight: 1.7 }}>
-                        <div>
-                          <b>{op.name}</b>
-                          {isActualRow ? " · 实绩（已签字）" : ""}
-                          {!isActualRow && op.is_insert ? " · 插队" : ""}
-                          {!isActualRow && op.plan_drift_label ? ` · ${op.plan_drift_label}` : ""}
-                        </div>
-                        <div>
-                          计划：{formatDateLabel(op.plan_start)} ~ {formatDateLabel(op.plan_end)}
-                          {op.plan_segments?.length
-                            ? ` · ${op.plan_segments.length} 段`
-                            : ""}
-                        </div>
-                        {op.plan_segments?.length ? (
-                          <div>
-                            时间段：
-                            {op.plan_segments
-                              .map(
-                                (s) =>
-                                  `${formatDateLabel(s.start)}~${formatDateLabel(s.end)}`,
-                              )
-                              .join("；")}
-                          </div>
-                        ) : null}
-                        {op.planned_hours ? (
-                          <div>
-                            计划工时：{op.planned_hours}h（日工时 {op.hours_per_day ?? 8}）
-                          </div>
-                        ) : null}
-                        <div>
-                          本条：
-                          {formatDateLabel(op.bar_start || op.actual_start)} ~{" "}
-                          {formatDateLabel(op.bar_end || op.actual_end)}
-                        </div>
-                        {!isActualRow && op.plan_vs_actual?.summary ? (
-                          <div>偏差：{op.plan_vs_actual.summary}</div>
-                        ) : null}
-                        <div>责任人：{op.assignee_name || "未派人"}</div>
-                        {isOrderDue ? <div>本日为订单交货日</div> : null}
-                      </div>
-                    );
                     const canDrag =
                       !isActualRow &&
                       op.status !== "done" &&
@@ -1846,180 +2107,129 @@ export default function GanttPage() {
                         op.plan_start.slice(0, 10) < TODAY_ISO() &&
                         d < TODAY_ISO()
                       );
-                    const runStart = (op.bar_start || op.plan_start || "").slice(0, 10);
-                    const runEnd = (op.bar_end || op.plan_end || runStart).slice(0, 10);
-                    const todayIso = TODAY_ISO();
-                    // 左缘已进入历史：不能再改开始日；贴今天时仍可往右收，但不能再往左
-                    const canResizeLeft =
-                      !isActualRow && op.status !== "done" && !!runStart && runStart >= todayIso;
-                    const canResizeRight =
-                      !isActualRow && op.status !== "done" && !!runEnd;
-                    const resizingThis = resizeState?.opId === op.id;
-                    const willRemove =
-                      resizingThis && !!resizePreview && inOrigRun && !inPreviewRun;
                     const needsVariance = !isActualRow && !!op.plan_vs_actual?.needs_action;
                     const dayTip = buildDayCellTip(
                       op,
                       d,
                       personNameById,
                       isActualRow ? "actual" : "plan",
-                      !isActualRow && (canDrag || canResizeLeft || canResizeRight),
+                      !isActualRow && canDrag,
                     );
+                    const dayAssignee =
+                      dayAssigneeNames(op, d, personNameById).join("、") ||
+                      op.assignee_name ||
+                      "未派人";
                     return (
                       <Tooltip
-                        key={`${op.id}-${op.bar_start || ""}-${d}`}
-                        title={
-                          willRemove ? (
-                            <div>将释放（松手后确认）</div>
-                          ) : resizingThis ? (
-                            <div>
-                              横向拉伸中…
-                              {resizeState ? ` 目标 ${resizeState.hoverDate}` : ""}
-                            </div>
-                          ) : (
-                            dayTip
-                          )
-                        }
+                        key={`${op.id}-${d}-${familyId || "all"}`}
+                        title={dayTip}
                       >
                         <div
-                          draggable={canDrag && !resizeState}
+                          draggable={canDrag}
                           onDragStart={(e) => {
-                            if (suppressBarDragRef.current || resizeState) {
-                              e.preventDefault();
-                              return;
-                            }
                             if (!canDrag) return;
                             e.dataTransfer.effectAllowed = "move";
                             setDragState({ opId: op.id, fromDate: d });
                           }}
                           onDragEnd={() => setDragState(null)}
                           onClick={() => {
-                            if (!isActualRow && !resizeState) openEdit(op);
+                            if (!isActualRow) openEdit(op);
                           }}
                           style={{
                             position: "absolute",
                             top: lane * (BAR_H + LANE_GAP),
-                            left: isStart ? 0 : -2,
-                            right: isOrderDue ? 0 : isEnd ? 0 : -2,
+                            left: 2,
+                            right: showDueMark ? DUE_GAP : 2,
                             cursor: canDrag ? "grab" : isActualRow ? "default" : "pointer",
                             height: BAR_H,
-                            padding: "0 6px",
-                            background: willRemove ? ghostColor : barColor,
+                            padding: "0 8px",
+                            background: barColor,
                             color: "#fff",
-                            borderTopLeftRadius: isStart ? 6 : 0,
-                            borderBottomLeftRadius: isStart ? 6 : 0,
-                            borderTopRightRadius: isEnd || isOrderDue ? 6 : 0,
-                            borderBottomRightRadius: isEnd || isOrderDue ? 6 : 0,
-                            border: willRemove
-                              ? "1px dashed rgba(255,255,255,0.9)"
-                              : activeBusyHints(op).length
-                                ? "1px solid #f59e0b"
-                                : needsVariance
-                                  ? "1px dashed #fbbf24"
-                                  : dragState?.opId === op.id
-                                    ? "1px solid #fff"
-                                    : "none",
+                            borderRadius: 4,
+                            border: activeBusyHints(op).length
+                              ? "1px solid #f59e0b"
+                              : needsVariance
+                                ? "1px dashed #fbbf24"
+                                : dragState?.opId === op.id
+                                  ? "1px solid #fff"
+                                  : "none",
                             opacity: dragState?.opId === op.id ? 0.85 : 1,
                             boxSizing: "border-box",
                             display: "flex",
-                            flexDirection: "column",
-                            justifyContent: "center",
+                            alignItems: "center",
                             overflow: "hidden",
                             zIndex: 1,
-                            pointerEvents: willRemove ? "none" : undefined,
                           }}
                         >
-                          {isStart && canResizeLeft && !willRemove ? (
-                            <div
-                              title="向左拉宽 / 向右缩短（不早于今天）"
-                              onPointerDown={(e) => startBarResize(op, "left", e)}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{
-                                position: "absolute",
-                                left: 0,
-                                top: 0,
-                                bottom: 0,
-                                width: 10,
-                                cursor: "ew-resize",
-                                zIndex: 3,
-                                background:
-                                  runStart <= todayIso
-                                    ? "rgba(255,255,255,0.15)"
-                                    : "rgba(255,255,255,0.35)",
-                                borderTopLeftRadius: 6,
-                                borderBottomLeftRadius: 6,
-                              }}
-                            />
-                          ) : null}
-                          {isEnd && canResizeRight && !willRemove ? (
-                            <div
-                              title="向右拉宽 / 向左缩短"
-                              onPointerDown={(e) => startBarResize(op, "right", e)}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{
-                                position: "absolute",
-                                right: 0,
-                                top: 0,
-                                bottom: 0,
-                                width: 10,
-                                cursor: "ew-resize",
-                                zIndex: 3,
-                                background: "rgba(255,255,255,0.35)",
-                                borderTopRightRadius: 6,
-                                borderBottomRightRadius: 6,
-                              }}
-                            />
-                          ) : null}
-                          {isStart ? (
-                            <>
-                              <div
-                                style={{
-                                  fontWeight: 600,
-                                  fontSize: 12,
-                                  lineHeight: 1.25,
-                                  whiteSpace: "nowrap",
-                                  textOverflow: "ellipsis",
-                                  overflow: "hidden",
-                                  paddingLeft: canResizeLeft ? 8 : 0,
-                                  paddingRight: isEnd && canResizeRight ? 8 : 0,
-                                }}
-                              >
-                                {op.name}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  opacity: 0.95,
-                                  whiteSpace: "nowrap",
-                                  textOverflow: "ellipsis",
-                                  overflow: "hidden",
-                                  paddingLeft: canResizeLeft ? 8 : 0,
-                                  paddingRight: isEnd && canResizeRight ? 8 : 0,
-                                }}
-                              >
-                                {isActualRow
-                                  ? "已签字"
-                                  : willRemove
-                                    ? "将释放"
-                                    : `${op.segment_day_sum || op.duration_days || 1}天 · ${
-                                        (op.staffing_gap || 0) > 0
-                                          ? `缺${op.staffing_gap}人`
-                                          : op.assignee_name || "未派人"
-                                      }`}
-                              </div>
-                            </>
-                          ) : null}
+                          <div
+                            style={{
+                              fontWeight: 600,
+                              fontSize: 11,
+                              lineHeight: 1.2,
+                              whiteSpace: "nowrap",
+                              textOverflow: "ellipsis",
+                              overflow: "hidden",
+                            }}
+                          >
+                            {op.name}
+                            <span style={{ fontWeight: 400, opacity: 0.95, marginLeft: 6 }}>
+                              {isActualRow
+                                ? "已签字"
+                                : (op.staffing_gap || 0) > 0
+                                  ? `缺${op.staffing_gap}人`
+                                  : dayAssignee}
+                            </span>
+                          </div>
                         </div>
                       </Tooltip>
                     );
                   })}
                 </div>
-              ) : isActualRow ? (
-                <div style={{ fontSize: 11, color: "#a0aec0", padding: "8px 4px" }}>待签字</div>
               ) : null}
             </div>
           );
         },
+      };
+      };
+
+      if (!multiSeg) {
+        return buildSegLeaf(null);
+      }
+
+      return {
+        title: (
+          <div
+            style={{
+              textAlign: "center",
+              fontWeight: isTodayCol ? 700 : 500,
+              fontSize: 12,
+              lineHeight: 1.3,
+              color: isTodayCol ? "#1677ff" : isPastCol ? "#a0aec0" : undefined,
+            }}
+          >
+            <div>{formatDateLabel(d)}</div>
+            {isTodayCol ? (
+              <div style={{ fontSize: 10, color: "#1677ff" }}>今天</div>
+            ) : isPastCol ? (
+              <div style={{ fontSize: 10, color: "#a0aec0" }}>已冻结</div>
+            ) : headerHasDue ? (
+              <div
+                title="有订单交期落在本日"
+                style={{
+                  margin: "2px auto 0",
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#ea580c",
+                }}
+              />
+            ) : null}
+          </div>
+        ),
+        key: `day-${d}`,
+        // 日期表头分组右缘与当日最后一班对齐
+        onHeaderCell: () => ({ className: "gantt-day-end" }),
+        children: daySegments.map((seg, i) => buildSegLeaf(seg, i)),
       };
     }),
   ];
@@ -2090,15 +2300,6 @@ export default function GanttPage() {
             <Button loading={replanning} onClick={() => requestReplan()}>
               一键重排
             </Button>
-            <Popconfirm
-              title="恢复演示排产？"
-              description="按今天重铺计划与进度；人员/技能等主数据保留，订单号不变。"
-              okText="恢复"
-              cancelText="取消"
-              onConfirm={() => void doResetDemo()}
-            >
-              <Button loading={resettingDemo}>恢复演示排产</Button>
-            </Popconfirm>
             <Tooltip title="刷新">
               <Button
                 icon={<ReloadOutlined />}
@@ -2184,12 +2385,15 @@ export default function GanttPage() {
           {digest.staffing_count > 0 ? (
             <Tag color="magenta">缺编 {digest.staffing_count}</Tag>
           ) : null}
+          {(digest.capacity_overload_count || 0) > 0 ? (
+            <Tag color="volcano">超载 {digest.capacity_overload_count}</Tag>
+          ) : null}
           {digest.delay_count > 0 ? (
             <Tag color="orange">延期 {digest.delay_count}</Tag>
           ) : null}
           {digest.overload_day_count > 0 ? (
             <Tag color="red">
-              超载 {digest.overload_day_count} 日
+              人日满载 {digest.overload_day_count} 日
               {digest.overload_dates?.[0] ? ` · 起 ${digest.overload_dates[0].slice(5)}` : ""}
             </Tag>
           ) : null}
@@ -2220,22 +2424,25 @@ export default function GanttPage() {
               }
         }
       >
-        <Space
-          wrap
+        <div
           style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
             marginBottom: 12,
             width: "100%",
-            justifyContent: "space-between",
           }}
         >
-          <Space wrap>
+          <Space wrap size={8} style={{ justifyContent: "flex-start" }}>
             {ganttFullscreen ? (
               <span style={{ fontWeight: 700, fontSize: 16 }}>排产甘特 · 全屏</span>
             ) : null}
             <Select
               allowClear
               placeholder="来源：客户/内部"
-              style={{ width: 160 }}
+              style={{ width: 140 }}
               value={sourceFilter}
               onChange={setSourceFilter}
               options={[
@@ -2244,12 +2451,63 @@ export default function GanttPage() {
               ]}
             />
             <Select
-              value={horizon}
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="工序"
               style={{ width: 140 }}
-              onChange={(v: "focus" | "all") => setHorizon(v)}
+              value={opNameFilter}
+              onChange={setOpNameFilter}
+              options={opNameOptions}
+            />
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="人员"
+              style={{ width: 150 }}
+              value={personFilter}
+              onChange={setPersonFilter}
+              options={personFilterOptions}
+            />
+            <DatePicker.RangePicker
+              allowClear
+              value={dateRangeFilter}
+              onChange={(v) =>
+                setDateRangeFilter(
+                  v && v[0] && v[1] ? [v[0], v[1]] : null,
+                )
+              }
+              placeholder={["开始日期", "结束日期"]}
+              style={{ width: 260 }}
+            />
+          </Space>
+          <Space wrap size={8} style={{ justifyContent: "flex-end", marginLeft: "auto" }}>
+            <Select
+              value={sortField}
+              style={{ width: 130 }}
+              onChange={(v) => {
+                setSortField(v);
+                if (v !== "default" && sortField === "default") {
+                  setSortDir(v === "duration" ? "desc" : "asc");
+                }
+              }}
               options={[
-                { value: "focus", label: "聚焦今天" },
-                { value: "all", label: "看全未完成" },
+                { value: "default", label: "当天有任务" },
+                { value: "plan_start", label: "开始日期" },
+                { value: "plan_end", label: "结束日期" },
+                { value: "duration", label: "总时长" },
+              ]}
+            />
+            <Radio.Group
+              optionType="button"
+              size="small"
+              disabled={sortField === "default"}
+              value={sortDir}
+              onChange={(e) => setSortDir(e.target.value)}
+              options={[
+                { value: "asc", label: "↑" },
+                { value: "desc", label: "↓" },
               ]}
             />
             <Button size="small" onClick={() => scrollGanttToToday()}>
@@ -2261,14 +2519,9 @@ export default function GanttPage() {
             <Button size="small" onClick={collapseAllOrders}>
               全部折叠
             </Button>
-            <span style={{ fontSize: 12, color: "#718096" }}>
-              {resizeState
-                ? `拉伸中 → ${resizeState.hoverDate}（松手确认，Esc 取消）`
-                : axis?.hint ||
-                  "展开后：拖中间改期；左右白边拉宽/缩短（左缘不早于今天）"}
-            </span>
-          </Space>
-          <Space>
+            {axis?.hint ? (
+              <span style={{ fontSize: 12, color: "#718096" }}>{axis.hint}</span>
+            ) : null}
             {ganttFullscreen ? (
               <Tooltip title="退出全屏（Esc）">
                 <Button icon={<CloseOutlined />} onClick={() => setGanttFullscreen(false)}>
@@ -2283,7 +2536,7 @@ export default function GanttPage() {
               </Tooltip>
             )}
           </Space>
-        </Space>
+        </div>
         <div
           ref={ganttScrollRef}
           style={{
@@ -2299,22 +2552,50 @@ export default function GanttPage() {
           <Table<GanttOrderRow>
             rowKey={(r) => `${r.order_id}:${r.row_kind || "plan"}`}
             loading={loading}
-            pagination={false}
             size="small"
             sticky
             scroll={{
-              x: Math.max(140 + dates.length * 128, 960),
+              x: Math.max(
+                280 +
+                  visibleDates.length *
+                    (multiSeg
+                      ? segColWidth * Math.max(daySegments.length, 1)
+                      : DAY_COL_W),
+                960,
+              ),
               y: ganttTableScrollY,
             }}
             dataSource={rows}
             columns={columns}
-            rowClassName={(row) => {
+            pagination={{
+              current: ganttPage,
+              pageSize: ganttPageSize,
+              total: sortedPlanRows.length,
+              showSizeChanger: true,
+              pageSizeOptions: ganttPageSizeOptions.map(String),
+              showTotal: (t) => `共 ${t} 单`,
+              size: "small",
+              onChange: (p, ps) => {
+                setGanttPage(p);
+                if (ps !== ganttPageSize) {
+                  if (ganttFullscreen) setPageSizeFs(ps);
+                  else setPageSizeNormal(ps);
+                  setGanttPage(1);
+                }
+              },
+            }}
+            rowClassName={(row, index) => {
               const stripe = orderStripeIndex.get(row.order_id || "") ?? 0;
-              const expanded = !!(row.order_id && expandedOrders.has(row.order_id));
-              const isOrderBoundary = !expanded || row.row_kind === "actual";
+              const next = rows[index + 1];
+              const sameOrderNext = !!(next && next.order_id && next.order_id === row.order_id);
+              // 计划→实绩：细分割线；订单末行：粗边界（与订单间区分）
+              const planActualSplit =
+                row.row_kind === "plan" && sameOrderNext && next?.row_kind === "actual";
+              const orderBoundary = !sameOrderNext;
               return [
                 stripe % 2 === 1 ? "gantt-order-odd" : "gantt-order-even",
-                isOrderBoundary ? "gantt-order-boundary" : "",
+                planActualSplit ? "gantt-plan-actual-split" : "",
+                orderBoundary ? "gantt-order-boundary" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
@@ -2327,8 +2608,16 @@ export default function GanttPage() {
             .gantt-order-odd > td.ant-table-cell-fix-left {
               background: #e8eef5 !important;
             }
+            .gantt-plan-actual-split > td {
+              border-bottom: 1px dashed #cbd5e1 !important;
+            }
             .gantt-order-boundary > td {
               border-bottom: 2px solid #64748b !important;
+            }
+            /* 自然日右缘：inset 不占列宽，表头/表体与班列对齐 */
+            th.gantt-day-end,
+            td.gantt-day-end {
+              box-shadow: inset -1px 0 0 #64748b !important;
             }
             /* 日期区轻斑马，不盖住「今天」高亮 */
             .gantt-order-odd > td:not(.ant-table-cell-fix-left) {
@@ -2371,6 +2660,7 @@ export default function GanttPage() {
                   conflict: "冲突",
                   staffing: "缺编",
                   leave: "请假",
+                  overload: "超载",
                   delay: "延期",
                   risk: "风险",
                 }}
@@ -2378,6 +2668,7 @@ export default function GanttPage() {
                   conflict: "red",
                   staffing: "magenta",
                   leave: "purple",
+                  overload: "volcano",
                   delay: "orange",
                   risk: "gold",
                 }}
@@ -2627,6 +2918,9 @@ export default function GanttPage() {
       <OrderDetailDrawer
         open={!!detailRow}
         row={detailRow}
+        actualRow={
+          detailRow?.order_id ? actualRowByOrder.get(detailRow.order_id) ?? null : null
+        }
         nameById={personNameById}
         onClose={() => setDetailRow(null)}
       />
@@ -2756,8 +3050,14 @@ export default function GanttPage() {
         title={editing ? `调整工序 · ${editing.name}` : "调整工序"}
         open={!!editing}
         confirmLoading={saving}
-        width={720}
-        onCancel={() => setEditing(null)}
+        width={980}
+        destroyOnHidden
+        onCancel={() => {
+          setEditing(null);
+          setResolvePreview(null);
+          setResolvePreviewLoading(false);
+          form.resetFields();
+        }}
         footer={[
           editing?.status === "running" ? (
             <Popconfirm
@@ -2800,7 +3100,6 @@ export default function GanttPage() {
             预览并保存
           </Button>,
         ]}
-        destroyOnHidden
       >
         {editing?.status === "running" ? (
           <Alert
@@ -2927,124 +3226,14 @@ export default function GanttPage() {
             }
           />
         ) : null}
-        {(editing?.staffing_gap || 0) > 0 ? (
-          <Alert
-            type="error"
-            showIcon
-            style={{ marginBottom: 12 }}
-            message={`人力缺编：需 ${editing?.required_headcount || 1} 人/天，缺 ${editing?.staffing_gap} 人`}
-            description="可在下方补齐责任人；人数仍不足时甘特会继续标注缺编。"
-          />
-        ) : null}
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="表格里改日期与数量；人/设备会默认填好，也可下拉增删改"
+          description="人数、设备数与右侧下拉联动。冲突汇总在表格下方。"
+        />
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="hours_per_day"
-            label="日工时（小时）"
-            rules={[{ required: true, message: "请填写日工时" }]}
-            extra="默认 8。有时间段时：计划工时 = 各段日历天合计 × 日工时"
-          >
-            <InputNumber min={1} max={24} step={0.5} style={{ width: "100%" }} />
-          </Form.Item>
-          <Form.List name="plan_segments">
-            {(fields, { add, remove }) => (
-              <div style={{ marginBottom: 16 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 8,
-                  }}
-                >
-                  <span style={{ fontWeight: 600 }}>时间段（可选，可多人多段）</span>
-                  <Button
-                    type="dashed"
-                    size="small"
-                    icon={<PlusOutlined />}
-                    onClick={() =>
-                      add({
-                        person_id: undefined,
-                        range: [dayjs(), dayjs()],
-                      })
-                    }
-                  >
-                    加一段
-                  </Button>
-                </div>
-                <div style={{ fontSize: 12, color: "#718096", marginBottom: 8 }}>
-                  非连续则甘特断开。不填则仍用下方「开始日期 + 耗时」连续排。
-                </div>
-                {fields.map((field) => (
-                  <Space
-                    key={field.key}
-                    align="start"
-                    style={{ display: "flex", marginBottom: 8 }}
-                    wrap
-                  >
-                    <Form.Item
-                      {...field}
-                      name={[field.name, "person_id"]}
-                      rules={[{ required: true, message: "选人" }]}
-                      style={{ marginBottom: 0, width: 140 }}
-                    >
-                      <Select
-                        placeholder="人员"
-                        options={(data?.persons ?? []).map((p) => ({
-                          value: p.id,
-                          label: p.name,
-                        }))}
-                      />
-                    </Form.Item>
-                    <Form.Item
-                      {...field}
-                      name={[field.name, "range"]}
-                      rules={[{ required: true, message: "选日期" }]}
-                      style={{ marginBottom: 0 }}
-                    >
-                      <DatePicker.RangePicker
-                        allowClear={false}
-                        cellRender={pastDateCellRender}
-                      />
-                    </Form.Item>
-                    <Button
-                      type="text"
-                      danger
-                      icon={<MinusOutlined />}
-                      onClick={() => remove(field.name)}
-                    />
-                  </Space>
-                ))}
-              </div>
-            )}
-          </Form.List>
-          <Form.Item
-            name="plan_start"
-            label="开始日期（无时间段时）"
-            rules={[{ required: true, message: "请选择开始日期" }]}
-            extra={
-              editing?.plan_start && editing.plan_start.slice(0, 10) < TODAY_ISO()
-                ? "历史开始日已冻结，仅可改派人员或调整耗时"
-                : "有时间段时此项会被段最早日覆盖"
-            }
-          >
-            <DatePicker
-              style={{ width: "100%" }}
-              allowClear={false}
-              cellRender={pastDateCellRender}
-              disabledDate={disablePastDate}
-              disabled={
-                !!(editing?.plan_start && editing.plan_start.slice(0, 10) < TODAY_ISO())
-              }
-              placeholder="选择开始日期"
-            />
-          </Form.Item>
-          <Form.Item
-            name="duration_days"
-            label="耗时（天，无时间段时）"
-            rules={[{ required: true }]}
-          >
-            <InputNumber min={1} max={30} style={{ width: "100%" }} />
-          </Form.Item>
           <Form.Item name="shift_id" label="班次" rules={[{ required: true, message: "请选择班次" }]}>
             <Select
               options={(data?.shift_options ?? []).map((s) => ({
@@ -3053,25 +3242,413 @@ export default function GanttPage() {
               }))}
             />
           </Form.Item>
-          <Form.Item
-            name="assignee_ids"
-            label={`责任人兜底（建议 ${editing?.required_headcount || 1} 人；有时间段时以段上人员为准）`}
-          >
-            <Select
-              mode="multiple"
-              allowClear
-              placeholder="按技能选人；人数不足会标缺编"
-              optionFilterProp="label"
-              options={(data?.persons ?? []).map((p) => {
-                const skills = p.skill_names?.length ? p.skill_names.join("、") : "";
-                const leave = p.status === "leave" ? " · 请假中" : "";
-                return {
-                  value: p.id,
-                  label: `${p.name}${skills ? `（${skills}）` : ""}${leave}`,
-                };
-              })}
-            />
-          </Form.Item>
+          <Form.List name="plan_segments">
+            {(fields, { add, remove }) => {
+              // 预览未完成前不展示缺口/冲突，避免打开瞬间「缺人」红块闪一下
+              const previewSettled = !!resolvePreview && !resolvePreviewLoading;
+              const opConflicts = previewSettled
+                ? (
+                    resolvePreview?.op_conflicts ??
+                    resolvePreview?.conflicts_after ??
+                    []
+                  ).filter(
+                    (c) =>
+                      c.status === "conflict" ||
+                      c.status === "overload" ||
+                      c.status === "leave" ||
+                      c.status === "staffing",
+                  )
+                : [];
+              const shortageLines: string[] = [];
+              if (previewSettled) {
+                for (const row of watchPlanSegs || []) {
+                  const { start, end } = segStartEnd(row);
+                  if (!start) continue;
+                  const hc = Number(row.required_headcount) || 1;
+                  const eq = Number(row.required_equipment) || 1;
+                  const pids = row.person_ids || [];
+                  const eids = row.equipment_ids || [];
+                  const label =
+                    start === end
+                      ? start.slice(5)
+                      : `${start.slice(5)}~${end.slice(5)}`;
+                  if (pids.length < hc) {
+                    shortageLines.push(
+                      `${label} 缺人：需 ${hc}，已选 ${pids.length}`,
+                    );
+                  }
+                  if (eids.length < eq) {
+                    shortageLines.push(
+                      `${label} 缺设备：需 ${eq}，已选 ${eids.length}`,
+                    );
+                  }
+                }
+              }
+              return (
+                <div style={{ marginBottom: 8 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 8,
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>
+                      计划段
+                      {resolvePreviewLoading ? (
+                        <Spin size="small" style={{ marginLeft: 8 }} />
+                      ) : null}
+                    </span>
+                    <Button
+                      type="dashed"
+                      size="small"
+                      icon={<PlusOutlined />}
+                      onClick={() =>
+                        add({
+                          start_date: dayjs(),
+                          end_date: dayjs(),
+                          required_headcount: 1,
+                          required_equipment: 1,
+                          person_ids: [],
+                          equipment_ids: [],
+                          _dateKey: "",
+                        })
+                      }
+                    >
+                      再加一段
+                    </Button>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        fontSize: 13,
+                        minWidth: 860,
+                      }}
+                    >
+                      <thead>
+                        <tr style={{ background: "#f7fafc", textAlign: "left" }}>
+                          {[
+                            "开始日期",
+                            "结束日期",
+                            "人数",
+                            "设备",
+                            "人",
+                            "设备",
+                            "",
+                          ].map((h) => (
+                            <th
+                              key={h || "act"}
+                              style={{
+                                padding: "8px 6px",
+                                borderBottom: "1px solid #e2e8f0",
+                                whiteSpace: "nowrap",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fields.map((field, idx) => {
+                          const row = (watchPlanSegs?.[field.name] ||
+                            watchPlanSegs?.[idx]) as EditSegForm | undefined;
+                          const { start: rowStart, end: rowEnd } = segStartEnd(row);
+                          const pids = row?.person_ids || [];
+                          const eids = row?.equipment_ids || [];
+                          const personLabels = pids.map(
+                            (id) => personNameById.get(id) || id,
+                          );
+                          const equipLabels = eids.map(
+                            (id) => equipmentNameById.get(id) || id,
+                          );
+                          const rowPersonOptions = personOptionsForRange(
+                            rowStart,
+                            rowEnd,
+                          );
+                          return (
+                            <tr key={field.key}>
+                              <td
+                                style={{
+                                  padding: "6px 4px",
+                                  borderBottom: "1px solid #edf2f7",
+                                  verticalAlign: "top",
+                                  width: 128,
+                                }}
+                              >
+                                <Form.Item
+                                  name={[field.name, "start_date"]}
+                                  rules={[{ required: true, message: "开始" }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <DatePicker
+                                    allowClear={false}
+                                    style={{ width: 120 }}
+                                    cellRender={pastDateCellRender}
+                                    disabledDate={disablePastDate}
+                                    onChange={() => {
+                                      form.setFieldValue(
+                                        ["plan_segments", field.name, "_dateKey"],
+                                        "",
+                                      );
+                                    }}
+                                  />
+                                </Form.Item>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "6px 4px",
+                                  borderBottom: "1px solid #edf2f7",
+                                  verticalAlign: "top",
+                                  width: 128,
+                                }}
+                              >
+                                <Form.Item
+                                  name={[field.name, "end_date"]}
+                                  rules={[{ required: true, message: "结束" }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <DatePicker
+                                    allowClear={false}
+                                    style={{ width: 120 }}
+                                    cellRender={pastDateCellRender}
+                                    disabledDate={disablePastDate}
+                                    onChange={() => {
+                                      form.setFieldValue(
+                                        ["plan_segments", field.name, "_dateKey"],
+                                        "",
+                                      );
+                                    }}
+                                  />
+                                </Form.Item>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "6px 4px",
+                                  borderBottom: "1px solid #edf2f7",
+                                  verticalAlign: "top",
+                                  width: 72,
+                                }}
+                              >
+                                <Form.Item
+                                  name={[field.name, "required_headcount"]}
+                                  rules={[{ required: true, message: "人数" }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <InputNumber
+                                    min={1}
+                                    max={8}
+                                    style={{ width: 64 }}
+                                    onChange={(n) => {
+                                      const next = Math.max(1, Number(n) || 1);
+                                      const cur =
+                                        (form.getFieldValue([
+                                          "plan_segments",
+                                          field.name,
+                                          "person_ids",
+                                        ]) as string[]) || [];
+                                      if (cur.length > next) {
+                                        form.setFieldValue(
+                                          ["plan_segments", field.name, "person_ids"],
+                                          cur.slice(0, next),
+                                        );
+                                      }
+                                    }}
+                                  />
+                                </Form.Item>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "6px 4px",
+                                  borderBottom: "1px solid #edf2f7",
+                                  verticalAlign: "top",
+                                  width: 72,
+                                }}
+                              >
+                                <Form.Item
+                                  name={[field.name, "required_equipment"]}
+                                  rules={[{ required: true, message: "设备数" }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <InputNumber
+                                    min={1}
+                                    max={8}
+                                    style={{ width: 64 }}
+                                    onChange={(n) => {
+                                      const next = Math.max(1, Number(n) || 1);
+                                      const cur =
+                                        (form.getFieldValue([
+                                          "plan_segments",
+                                          field.name,
+                                          "equipment_ids",
+                                        ]) as string[]) || [];
+                                      if (cur.length > next) {
+                                        form.setFieldValue(
+                                          [
+                                            "plan_segments",
+                                            field.name,
+                                            "equipment_ids",
+                                          ],
+                                          cur.slice(0, next),
+                                        );
+                                      }
+                                    }}
+                                  />
+                                </Form.Item>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "6px 4px",
+                                  borderBottom: "1px solid #edf2f7",
+                                  verticalAlign: "top",
+                                  minWidth: 180,
+                                }}
+                              >
+                                <Form.Item
+                                  name={[field.name, "person_ids"]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Select
+                                    mode="multiple"
+                                    allowClear
+                                    showSearch
+                                    optionFilterProp="label"
+                                    placeholder="自动填充，可改"
+                                    options={
+                                      rowPersonOptions as {
+                                        label: string;
+                                        options?: {
+                                          value: string;
+                                          label: string;
+                                          disabled?: boolean;
+                                        }[];
+                                        value?: string;
+                                        disabled?: boolean;
+                                      }[]
+                                    }
+                                    maxTagCount={1}
+                                    maxTagPlaceholder={(omitted) =>
+                                      collapsedTagsPlaceholder(omitted, personLabels)
+                                    }
+                                    style={{ width: "100%", minWidth: 160 }}
+                                    onChange={(ids: string[]) => {
+                                      form.setFieldValue(
+                                        [
+                                          "plan_segments",
+                                          field.name,
+                                          "required_headcount",
+                                        ],
+                                        Math.max(1, ids.length || 1),
+                                      );
+                                    }}
+                                  />
+                                </Form.Item>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "6px 4px",
+                                  borderBottom: "1px solid #edf2f7",
+                                  verticalAlign: "top",
+                                  minWidth: 160,
+                                }}
+                              >
+                                <Form.Item
+                                  name={[field.name, "equipment_ids"]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Select
+                                    mode="multiple"
+                                    allowClear
+                                    showSearch
+                                    optionFilterProp="label"
+                                    placeholder="自动填充，可改"
+                                    options={equipmentOptions as { label: string; options?: { value: string; label: string }[]; value?: string }[]}
+                                    maxTagCount={1}
+                                    maxTagPlaceholder={(omitted) =>
+                                      collapsedTagsPlaceholder(omitted, equipLabels)
+                                    }
+                                    style={{ width: "100%", minWidth: 140 }}
+                                    onChange={(ids: string[]) => {
+                                      form.setFieldValue(
+                                        [
+                                          "plan_segments",
+                                          field.name,
+                                          "required_equipment",
+                                        ],
+                                        Math.max(1, ids.length || 1),
+                                      );
+                                    }}
+                                  />
+                                </Form.Item>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "6px 4px",
+                                  borderBottom: "1px solid #edf2f7",
+                                  verticalAlign: "top",
+                                  width: 40,
+                                }}
+                              >
+                                <Button
+                                  type="text"
+                                  danger
+                                  disabled={fields.length <= 1}
+                                  icon={<MinusOutlined />}
+                                  onClick={() => remove(field.name)}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {(shortageLines.length > 0 || opConflicts.length > 0) && (
+                    <div
+                      style={{
+                        marginTop: 12,
+                        padding: "10px 12px",
+                        borderRadius: 8,
+                        background: "#fff5f5",
+                        border: "1px solid #feb2b2",
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, color: "#c53030", marginBottom: 6 }}>
+                        冲突与缺口
+                      </div>
+                      {shortageLines.map((line) => (
+                        <div key={line} style={{ color: "#e53e3e", fontSize: 13 }}>
+                          {line}
+                        </div>
+                      ))}
+                      {opConflicts.slice(0, 8).map((c, i) => (
+                        <div
+                          key={`${c.reason}-${i}`}
+                          style={{ color: "#e53e3e", fontSize: 13 }}
+                        >
+                          {c.status === "overload"
+                            ? "超载："
+                            : c.status === "leave"
+                              ? "请假："
+                              : c.status === "staffing"
+                                ? "缺编："
+                                : "冲突："}
+                          {c.reason}
+                          {c.assignee_name ? `（${c.assignee_name}）` : ""}
+                          {c.equipment_name ? ` · ${c.equipment_name}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }}
+          </Form.List>
         </Form>
       </Modal>
 

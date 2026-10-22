@@ -12,11 +12,45 @@ export type OpStatus = "pending" | "running" | "paused" | "done" | "exception" |
 export interface SkillItem {
   id: string;
   name: string;
+  code?: string;
+  status?: "active" | "disabled" | string;
+  status_label?: string;
+  sort?: number;
+  person_count?: number;
+  template_count?: number;
 }
 
 export interface ResourceItem {
   id: string;
   name: string;
+  code?: string;
+  status?: "active" | "disabled" | string;
+  status_label?: string;
+  sort?: number;
+  member_count?: number;
+}
+
+export interface EquipmentItem {
+  id: string;
+  name: string;
+  code?: string;
+  status?: "active" | "disabled" | string;
+  status_label?: string;
+  sort?: number;
+  resource_id?: string | null;
+  resource_name?: string | null;
+  is_shared?: boolean;
+  op_count?: number;
+}
+
+export interface PersonTodayRoster {
+  day: string;
+  kind: "shift" | "leave" | "empty" | string;
+  label: string;
+  shift_family_id?: string | null;
+  shift_name?: string | null;
+  leave_id?: string | null;
+  leave_reason?: string | null;
 }
 
 export interface PersonItem {
@@ -27,9 +61,16 @@ export interface PersonItem {
   skill_names?: string[];
   status: PersonStatus;
   resource_id?: string | null;
+  resource_name?: string | null;
   shift_family_ids?: string[];
   shift_names?: string[];
+  /** @deprecated 长期任职已不在人员表展示；请用 today_roster */
   current_assignment?: ShiftAssignmentItem | null;
+  /** 今日当班（从排班周历/请假推导） */
+  today_roster?: PersonTodayRoster | null;
+  /** 本周七天缩略：白/中/夜/假/— */
+  week_roster_labels?: string[];
+  week_start?: string;
 }
 
 export interface ShiftItem {
@@ -41,6 +82,11 @@ export interface ShiftItem {
   start_time: string;
   end_time: string;
   crosses_midnight?: boolean;
+  /** 班序：甘特一天内从左到右、轮换链共用 */
+  sort_order?: number;
+  /** 归属日：start_day=开班日；previous_day=前一日（凌晨班跟首班生产日） */
+  belong_day_rule?: "start_day" | "previous_day" | string;
+  belong_day_label?: string;
   status: "active" | "superseded" | "disabled" | string;
   status_label?: string;
   lifecycle?: "active" | "upcoming" | "expired" | "superseded" | "disabled" | string;
@@ -49,6 +95,21 @@ export interface ShiftItem {
   effective_to_label?: string;
   superseded_by?: string | null;
   note?: string | null;
+  time_label?: string;
+}
+
+/** 甘特/排产共用的一天 N 段（与当前启用班一致） */
+export interface DaySegment {
+  family_id: string;
+  shift_id: string;
+  name: string;
+  code?: string;
+  start_time?: string;
+  end_time?: string;
+  crosses_midnight?: boolean;
+  sort_order?: number;
+  belong_day_rule?: "start_day" | "previous_day" | string;
+  belong_day_label?: string;
   time_label?: string;
 }
 
@@ -75,6 +136,8 @@ export interface TemplateItem {
   std_hours: number;
   skill_id: string;
   skill_name?: string;
+  equipment_ids?: string[];
+  equipment_names?: string[];
   prev_template_id?: string | null;
   prev_template_name?: string | null;
   status: TemplateStatus;
@@ -114,6 +177,10 @@ export interface OperationItem {
   skill_name?: string;
   resource_id?: string;
   resource_name?: string;
+  equipment_id?: string | null;
+  equipment_name?: string | null;
+  equipment_code?: string | null;
+  equipment_pool_ids?: string[];
   assignee_id?: string | null;
   assignee_ids?: string[];
   assignee_name?: string;
@@ -127,10 +194,21 @@ export interface OperationItem {
   plan_segments?: Array<{
     id?: string;
     person_id?: string | null;
+    person_ids?: string[];
+    person_names?: string[];
+    equipment_ids?: string[];
+    equipment_names?: string[];
+    required_headcount?: number | null;
+    required_equipment?: number | null;
+    staffing_gap?: number;
+    equipment_gap?: number;
     start: string;
     end: string;
   }>;
-  /** 日工时，默认 8；计划工时 = 段合计天 × 日工时 */
+  equipment_ids?: string[];
+  equipment_names?: string[];
+  equipment_gap?: number;
+  /** 班次工时（由班制时段推算）；计划工时 = 段合计天 × 班次工时 */
   hours_per_day?: number;
   segment_day_sum?: number;
   planned_hours?: number;
@@ -265,12 +343,14 @@ export interface MasterDataResponse {
   kpis: KpiItem[];
   skills: SkillItem[];
   resources: ResourceItem[];
+  equipments?: EquipmentItem[];
   persons: PersonItem[];
   templates: TemplateItem[];
   leaves?: LeaveItem[];
   substitutions?: SubstitutionItem[];
   shifts?: ShiftItem[];
   shift_options?: ShiftItem[];
+  day_segments?: DaySegment[];
   shift_assignments?: ShiftAssignmentItem[];
 }
 
@@ -318,6 +398,8 @@ export interface GanttConflict {
   work_order_code?: string;
   work_order_name?: string;
   resource_name?: string;
+  equipment_id?: string;
+  equipment_name?: string;
   assignee_name?: string;
   plan_window?: string;
   due_date?: string;
@@ -330,6 +412,7 @@ export interface GanttConflict {
   impact?: string;
   suggestion: string;
   status: string;
+  conflict_kind?: string;
   delay_days?: number;
   leave_id?: string;
   required_headcount?: number;
@@ -348,6 +431,7 @@ export interface TodayDigest {
   leave_count: number;
   staffing_count: number;
   delay_count: number;
+  capacity_overload_count?: number;
   overload_day_count: number;
   overload_dates: string[];
 }
@@ -372,7 +456,10 @@ export interface GanttResponse {
   order_options?: GanttOption[];
   template_options?: GanttOption[];
   persons?: PersonItem[];
+  /** 未关闭请假；派工按段日期判断，勿只看 persons.status */
+  leaves?: LeaveItem[];
   resources: ResourceItem[];
+  equipments?: EquipmentItem[];
   rows?: GanttOrderRow[];
   tasks: OperationItem[];
   conflicts: GanttConflict[];
@@ -400,6 +487,8 @@ export interface GanttResponse {
   sandbox?: { active: boolean; hint?: string | null };
   sandbox_message?: string;
   shift_options?: ShiftItem[];
+  /** 与启用班同步：一天切成 N 段 */
+  day_segments?: DaySegment[];
   today_digest?: TodayDigest;
   replan_meta?: {
     frozen_count?: number;
@@ -423,6 +512,10 @@ export interface ImpactPreview {
     staffing_gap?: number;
   }>;
   conflicts_after?: GanttConflict[];
+  /** 试算后的工序快照（含自动派人/占机结果） */
+  resolved_op?: OperationItem;
+  /** 与本工序相关的冲突（编辑弹窗标红） */
+  op_conflicts?: GanttConflict[];
   metrics?: Record<string, number>;
   strategy?: string;
   strategy_label?: string;
@@ -655,17 +748,112 @@ export function updatePerson(id: string, payload: Partial<PersonItem>) {
   return putData<PersonItem>(`/scheduling/persons/${id}`, payload);
 }
 
+export function createResource(payload: {
+  name: string;
+  code: string;
+  status?: string;
+  sort?: number;
+}) {
+  return postData<ResourceItem>("/scheduling/resources", payload);
+}
+
+export function updateResource(
+  id: string,
+  payload: { name: string; code: string; status?: string; sort?: number },
+) {
+  return putData<ResourceItem>(`/scheduling/resources/${id}`, payload);
+}
+
+export function deleteResource(id: string, migrateTo?: string | null) {
+  return deleteData<{
+    ok: boolean;
+    deleted_id: string;
+    migrated_persons: number;
+    migrate_to?: string | null;
+  }>(`/scheduling/resources/${id}`, migrateTo ? { migrate_to: migrateTo } : undefined);
+}
+
+export function createSkill(payload: {
+  name: string;
+  code: string;
+  status?: string;
+  sort?: number;
+}) {
+  return postData<SkillItem>("/scheduling/skills", payload);
+}
+
+export function updateSkill(
+  id: string,
+  payload: { name: string; code: string; status?: string; sort?: number },
+) {
+  return putData<SkillItem>(`/scheduling/skills/${id}`, payload);
+}
+
+export function deleteSkill(id: string, migrateTo?: string | null) {
+  return deleteData<{
+    ok: boolean;
+    deleted_id: string;
+    migrated_persons: number;
+    migrated_templates: number;
+    migrated_ops: number;
+    migrate_to?: string | null;
+  }>(`/scheduling/skills/${id}`, migrateTo ? { migrate_to: migrateTo } : undefined);
+}
+
+export function createEquipment(payload: {
+  name: string;
+  code: string;
+  status?: string;
+  sort?: number;
+  resource_id?: string | null;
+}) {
+  return postData<EquipmentItem>("/scheduling/equipments", payload);
+}
+
+export function updateEquipment(
+  id: string,
+  payload: {
+    name: string;
+    code: string;
+    status?: string;
+    sort?: number;
+    resource_id?: string | null;
+  },
+) {
+  return putData<EquipmentItem>(`/scheduling/equipments/${id}`, payload);
+}
+
+export function deleteEquipment(id: string, migrateTo?: string | null) {
+  return deleteData<{
+    ok: boolean;
+    deleted_id: string;
+    migrated_ops: number;
+    migrate_to?: string | null;
+  }>(`/scheduling/equipments/${id}`, migrateTo ? { migrate_to: migrateTo } : undefined);
+}
+
 export function createShift(payload: {
   code: string;
   name: string;
   start_time?: string;
   end_time?: string;
   crosses_midnight?: boolean;
+  belong_day_rule?: "start_day" | "previous_day" | string;
   effective_from?: string;
   effective_to?: string | null;
   note?: string;
+  sort_order?: number;
 }) {
   return postData<ShiftItem>("/scheduling/shifts", payload);
+}
+
+/** 调整班序（甘特 N 段顺序 / 轮换链） */
+export function reorderShifts(familyIds: string[]) {
+  return postData<{
+    family_ids: string[];
+    day_segments: DaySegment[];
+    shift_options: ShiftItem[];
+  }>("/scheduling/shifts/reorder", { family_ids: familyIds });
 }
 
 export function publishShiftVersion(
@@ -676,6 +864,7 @@ export function publishShiftVersion(
     start_time?: string;
     end_time?: string;
     crosses_midnight?: boolean;
+    belong_day_rule?: "start_day" | "previous_day" | string;
     effective_from?: string;
     effective_to?: string | null;
     note?: string;
@@ -693,10 +882,48 @@ export function fetchShiftHistory(familyId: string) {
   );
 }
 
+export interface ShiftUsageResponse {
+  family_id: string;
+  family_name?: string;
+  open_op_count: number;
+  open_assignment_count: number;
+  /** 有未完成工序时强制选择替换目标 */
+  requires_migrate: boolean;
+  /** 有工序或任职占用时建议选择替换（否则任职会被直接结束） */
+  suggest_migrate?: boolean;
+  ops: Array<{
+    id: string;
+    name?: string;
+    plan_start?: string;
+    plan_end?: string;
+    work_order_code?: string;
+  }>;
+  migrate_targets: ShiftItem[];
+}
+
+export function fetchShiftUsage(familyId: string) {
+  return getData<ShiftUsageResponse>(`/scheduling/shifts/${familyId}/usage`);
+}
+
+export function disableShiftFamily(
+  familyId: string,
+  migrateToFamilyId?: string | null,
+) {
+  return postData<{
+    family_id: string;
+    migrated_op_count: number;
+    migrated_assignment_count: number;
+    closed_assignment_count?: number;
+    migrate_to_family_id?: string | null;
+    items: ShiftItem[];
+  }>(`/scheduling/shifts/${familyId}/disable`, {
+    migrate_to_family_id: migrateToFamilyId ?? null,
+  });
+}
+
+/** @deprecated 请用 disableShiftFamily；无占用时可直接停用 */
 export function deleteShiftFamily(familyId: string) {
-  return deleteData<{ family_id: string; items: ShiftItem[] }>(
-    `/scheduling/shifts/${familyId}`,
-  );
+  return disableShiftFamily(familyId);
 }
 
 export function createShiftAssignment(payload: {
@@ -718,6 +945,121 @@ export function closeShiftAssignment(id: string, end_date?: string | null) {
 
 export function deleteShiftAssignment(id: string) {
   return deleteData<ShiftAssignmentItem>(`/scheduling/shift-assignments/${id}`);
+}
+
+export type RosterCellKind = "shift" | "leave" | "empty";
+
+export interface RosterCell {
+  kind: RosterCellKind;
+  label: string;
+  shift_family_id?: string | null;
+  shift_name?: string | null;
+  leave_id?: string | null;
+  leave_reason?: string | null;
+}
+
+export interface RosterWeekRow {
+  person_id: string;
+  person_name?: string;
+  person_code?: string;
+  resource_id?: string | null;
+  shift_family_ids?: string[];
+  cells: Record<string, RosterCell>;
+}
+
+export interface RosterWeekResponse {
+  week_start: string;
+  week_end: string;
+  dates: string[];
+  shift_options: Array<{
+    family_id: string;
+    name: string;
+    short: string;
+    color?: string;
+    /** 周内仍挂着的旧班（已停用），仅便于显示/清空 */
+    disabled?: boolean;
+  }>;
+  rotate_chain?: string;
+  rows: RosterWeekRow[];
+  generated?: {
+    mode?: "seed" | "assign" | "rotate" | string;
+    mode_label?: string;
+    assignment_segments: number;
+    skipped_leave_days: number;
+    person_count: number;
+    skipped_no_prev?: number;
+    capability_opened?: number;
+    family_count?: number;
+    family_ids?: string[];
+    shift_family_id?: string;
+    shift_name?: string;
+    effective_from?: string;
+    end_date?: string;
+    mapping?: Record<string, string>;
+    rotate_chain?: string;
+  };
+}
+
+export function fetchRosterWeek(weekStart?: string) {
+  return getData<RosterWeekResponse>("/scheduling/roster/week", {
+    week_start: weekStart || undefined,
+  });
+}
+
+export interface RosterAnalysisSeries {
+  key: string;
+  name: string;
+  color: string;
+  values: number[];
+}
+
+export interface RosterAnalysisResponse {
+  start_date: string;
+  end_date: string;
+  dates: string[];
+  day_labels: string[];
+  series: RosterAnalysisSeries[];
+  totals: number[];
+  person_total: number;
+}
+
+export function fetchRosterAnalysis(startDate?: string, endDate?: string) {
+  return getData<RosterAnalysisResponse>("/scheduling/roster/analysis", {
+    start_date: startDate || undefined,
+    end_date: endDate || undefined,
+  });
+}
+
+/** 排班：时间段 + 一个班 + 一批人 */
+export function assignRosterBatch(payload: {
+  start_date: string;
+  end_date: string;
+  shift_family_id: string;
+  person_ids: string[];
+  note?: string;
+}) {
+  return postData<RosterWeekResponse>("/scheduling/roster/assign", payload);
+}
+
+/** 换班：两班自动对换；三班传 mapping{旧→新}；覆盖起止日期 */
+export function rotateRoster(payload: {
+  week_start?: string;
+  effective_from: string;
+  end_date: string;
+  person_ids?: string[];
+  family_ids?: string[];
+  mapping?: Record<string, string>;
+}) {
+  return postData<RosterWeekResponse>("/scheduling/roster/rotate", payload);
+}
+
+export function setRosterDay(payload: {
+  person_id: string;
+  day: string;
+  shift_family_id?: string | null;
+  note?: string;
+}) {
+  return postData<RosterWeekResponse>("/scheduling/roster/day", payload);
 }
 
 export function createTemplate(payload: Partial<TemplateItem>) {
@@ -784,9 +1126,12 @@ export function deleteOrder(orderId: string) {
   }>(`/scheduling/orders/${orderId}`);
 }
 
-export function fetchGantt(horizon: "focus" | "all" | string = "focus") {
-  const q = horizon && horizon !== "focus" ? `?horizon=${encodeURIComponent(horizon)}` : "";
-  return getData<GanttResponse>(`/scheduling/gantt${q}`);
+/** 默认 all：从今天往前留几天，右端拉到未完工计划结束（排到哪看到哪）。 */
+export function fetchGantt(horizon: "focus" | "all" | string = "all") {
+  const mode = horizon || "all";
+  return getData<GanttResponse>(
+    `/scheduling/gantt?horizon=${encodeURIComponent(mode)}`,
+  );
 }
 
 export function replanGantt(strategy = "protect_due", scope = "gantt") {
@@ -820,7 +1165,16 @@ export function moveGanttTask(
       end: string;
     }>;
     hours_per_day?: number;
+    equipment_id?: string | null;
+    clear_equipment?: boolean;
     cascade?: boolean;
+    /** 按排班重解析各日责任人（换班/整段平移） */
+    resolve_roster?: boolean;
+    /** 仅补空人的日（拉宽新增格） */
+    only_fill_empty?: boolean;
+    required_headcount?: number;
+    /** 按负荷自动重选设备 */
+    auto_equipment?: boolean;
   },
 ) {
   return putData<OperationItem>(`/scheduling/gantt/tasks/${opId}`, payload);
@@ -870,7 +1224,13 @@ export function previewMoveGanttTask(
       end: string;
     }>;
     hours_per_day?: number;
+    equipment_id?: string | null;
+    clear_equipment?: boolean;
     cascade?: boolean;
+    resolve_roster?: boolean;
+    only_fill_empty?: boolean;
+    required_headcount?: number;
+    auto_equipment?: boolean;
   },
 ) {
   return postData<ImpactPreview>(`/scheduling/gantt/preview/move/${opId}`, payload);
@@ -956,7 +1316,7 @@ export function pauseOperation(opId: string, reason?: string) {
   return postData<OperationItem>(`/scheduling/report/${opId}/pause`, { reason });
 }
 
-export function resetSchedulingDemo() {
+export function resetSchedulingBaseline() {
   return postData<{
     ok: boolean;
     anchor?: string;

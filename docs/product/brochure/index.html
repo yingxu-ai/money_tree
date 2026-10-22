@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>元启·工小智 — 产品宣传册</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #14233a;
+      --ink-soft: #3d4f66;
+      --steel: #1e3a5f;
+      --teal: #0f766e;
+      --teal-soft: #ccfbf1;
+      --sand: #eef2f6;
+      --line: #d5dde8;
+      --paper: #f7f9fb;
+      --live: #0f766e;
+      --soon: #8a96a8;
+      --warn: #b45309;
+      --white: #ffffff;
+      --max: 1080px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 16px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .brand-en {
+      font-family: Outfit, "Noto Sans SC", sans-serif;
+      letter-spacing: 0.04em;
+    }
+
+    img { max-width: 100%; display: block; }
+    a { color: var(--teal); }
+
+    /* —— layout —— */
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
+    section { padding: 72px 0; }
+    section.tight { padding: 48px 0; }
+    .eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 12px;
+    }
+    h1, h2, h3 { margin: 0 0 12px; line-height: 1.25; font-weight: 700; }
+    h1 { font-size: clamp(2rem, 4vw, 3rem); }
+    h2 { font-size: clamp(1.55rem, 2.6vw, 2rem); color: var(--steel); }
+    h3 { font-size: 1.15rem; }
+    .lead { font-size: 1.1rem; color: var(--ink-soft); max-width: 42em; }
+    .muted { color: var(--ink-soft); }
+    .tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;
+    }
+    .tag.live { background: var(--teal-soft); color: var(--live); }
+    .tag.soon { background: #e8edf3; color: var(--soon); }
+
+    /* —— top bar —— */
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: blur(10px);
+      background: rgba(247, 249, 251, 0.88);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar-inner {
+      max-width: var(--max); margin: 0 auto; padding: 12px 28px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .logo {
+      display: flex; align-items: baseline; gap: 10px; font-weight: 700; color: var(--steel);
+      text-decoration: none;
+    }
+    .logo span { font-size: 13px; font-weight: 500; color: var(--ink-soft); }
+    .nav { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+    .nav a { color: var(--ink-soft); text-decoration: none; }
+    .nav a:hover { color: var(--teal); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 10px 18px; border-radius: 6px; border: none; cursor: pointer;
+      font: inherit; font-weight: 600; font-size: 14px; text-decoration: none;
+    }
+    .btn-primary { background: var(--steel); color: var(--white); }
+    .btn-ghost { background: transparent; color: var(--steel); border: 1px solid var(--line); }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+
+    /* —— hero —— */
+    .hero {
+      position: relative; min-height: 72vh;
+      display: grid; align-items: end;
+      color: var(--white);
+      overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(105deg, rgba(20, 35, 58, 0.92) 0%, rgba(20, 35, 58, 0.55) 48%, rgba(15, 118, 110, 0.25) 100%),
+        url("assets/gongxiaozhi-cover.jpg") center/cover no-repeat;
+    }
+    .hero-content {
+      position: relative; z-index: 1;
+      max-width: var(--max); margin: 0 auto; width: 100%;
+      padding: 88px 28px 64px;
+    }
+    .hero h1 { color: #fff; max-width: 12em; }
+    .hero .lead { color: rgba(255,255,255,0.88); }
+    .hero-motto {
+      margin-top: 28px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.25);
+      font-size: 15px; letter-spacing: 0.08em; color: rgba(255,255,255,0.9);
+    }
+
+    /* —— pain grid —— */
+    .pain-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;
+      margin-top: 28px;
+    }
+    .pain-card {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--warn);
+      padding: 18px 16px;
+    }
+    .pain-card strong { display: block; margin-bottom: 6px; color: var(--steel); }
+    .pain-card p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+
+    /* —— architecture —— */
+    .arch {
+      display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 28px; align-items: center;
+      margin-top: 28px;
+    }
+    @media (max-width: 860px) { .arch { grid-template-columns: 1fr; } }
+    .arch-visual {
+      border: 1px solid var(--line); background: var(--white); overflow: hidden;
+    }
+    .arch-visual img { width: 100%; height: auto; }
+    .module-strip {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 20px;
+    }
+    @media (max-width: 720px) { .module-strip { grid-template-columns: repeat(3, 1fr); } }
+    .mod-chip {
+      text-align: center; padding: 12px 6px; border: 1px solid var(--line); background: var(--white);
+    }
+    .mod-chip.live { border-color: #99f6e4; background: #f0fdfa; }
+    .mod-chip .name { font-weight: 700; font-size: 18px; color: var(--steel); }
+    .mod-chip.live .name { color: var(--teal); }
+    .mod-chip .full { font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
+    .mod-chip .st { font-size: 11px; margin-top: 6px; font-weight: 600; }
+
+    /* —— dual feature —— */
+    .dual-hero {
+      margin: 0 0 28px; border: 1px solid var(--line); overflow: hidden; background: #111;
+    }
+    .dual-hero img { width: 100%; opacity: 0.95; }
+    .feature-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    }
+    @media (max-width: 800px) { .feature-grid { grid-template-columns: 1fr; } }
+    .feature {
+      background: var(--white); border: 1px solid var(--line); padding: 28px 24px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .feature header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .feature .slogan {
+      font-size: 1.05rem; font-weight: 600; color: var(--steel); line-height: 1.45;
+    }
+    .flow {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px;
+    }
+    .flow span {
+      background: var(--sand); padding: 6px 10px; border-radius: 4px; color: var(--ink);
+      font-weight: 500;
+    }
+    .flow i { font-style: normal; color: var(--soon); }
+    .bullet { margin: 0; padding-left: 1.1em; color: var(--ink-soft); font-size: 14px; }
+    .bullet li { margin: 6px 0; }
+    .compare {
+      width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px;
+    }
+    .compare th, .compare td {
+      border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top;
+    }
+    .compare th { background: var(--sand); color: var(--steel); font-weight: 600; }
+    .compare td.ours { background: #f0fdfa; color: var(--teal); font-weight: 600; }
+
+    /* —— combo —— */
+    .combo-board {
+      display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch;
+      margin-top: 24px;
+    }
+    @media (max-width: 720px) {
+      .combo-board { grid-template-columns: 1fr; }
+      .combo-plus { transform: rotate(90deg); justify-self: center; }
+    }
+    .combo-side {
+      background: var(--white); border: 1px solid var(--line); padding: 22px;
+    }
+    .combo-plus {
+      display: flex; align-items: center; justify-content: center;
+      font-family: Outfit, sans-serif; font-size: 28px; font-weight: 700; color: var(--teal);
+    }
+    .combo-result {
+      margin-top: 18px; padding: 22px 24px;
+      background: linear-gradient(90deg, #ecfdf8, #eef4fb);
+      border: 1px solid #99f6e4;
+    }
+    .steps {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px;
+    }
+    @media (max-width: 720px) { .steps { grid-template-columns: 1fr; } }
+    .step {
+      background: var(--white); border: 1px solid var(--line); padding: 16px;
+      position: relative;
+    }
+    .step .n {
+      font-family: Outfit, sans-serif; font-size: 22px; font-weight: 700; color: var(--teal);
+    }
+
+    /* —— roadmap —— */
+    .road-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
+      margin-top: 24px;
+    }
+    .road-card {
+      background: var(--white); border: 1px dashed var(--line); padding: 18px 16px;
+      opacity: 0.92;
+    }
+    .road-card h3 { color: var(--soon); }
+    .road-card p { margin: 0; font-size: 13px; color: var(--ink-soft); }
+
+    /* —— packages —— */
+    .pkg-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+    .pkg-table th, .pkg-table td {
+      border: 1px solid var(--line); padding: 12px 14px; text-align: left; vertical-align: top;
+      background: var(--white);
+    }
+    .pkg-table th { background: var(--steel); color: #fff; font-weight: 600; }
+    .pkg-table tr:nth-child(even) td { background: #fbfcfe; }
+
+    /* —— footer —— */
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 36px 0 48px; color: var(--ink-soft); font-size: 13px;
+    }
+    footer .big {
+      font-size: 18px; font-weight: 700; color: var(--steel); margin-bottom: 8px;
+    }
+
+    /* —— print —— */
+    @media print {
+      .topbar, .btn-row, .no-print { display: none !important; }
+      body { background: #fff; font-size: 11pt; }
+      section { padding: 28px 0; break-inside: avoid; }
+      .hero { min-height: auto; color: #fff; }
+      .hero-content { padding: 40px 0; }
+      .feature, .pain-card, .step, .combo-side { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar no-print">
+    <div class="topbar-inner">
+      <a class="logo" href="#top">元启·工小智 <span class="brand-en">GONG XIAO ZHI</span></a>
+      <nav class="nav">
+        <a href="#pain">痛点</a>
+        <a href="#arch">能力域</a>
+        <a href="#modules">六大能力</a>
+        <a href="#combo">合买</a>
+        <a href="#packages">方案包</a>
+      </nav>
+      <button class="btn btn-ghost" type="button" onclick="window.print()">打印 / PDF</button>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <header class="hero" id="top">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-content">
+      <div class="eyebrow" style="color:#99f6e4">工业现场的智能作业平台</div>
+      <h1>元启·工小智</h1>
+      <p class="lead">
+        把「排得清、诊得准、检得稳、方得优、艺得精、规得住」做成可分可合的能力域。
+        按工厂真实节奏上线，而不是一次性堆一个大系统。
+      </p>
+      <div class="btn-row no-print">
+        <a class="btn btn-primary" href="#modules">看六大能力</a>
+        <a class="btn btn-ghost" href="#packages" style="border-color:rgba(255,255,255,.35);color:#fff">看组合方案</a>
+      </div>
+      <div class="hero-motto">排得清 · 诊得准 · 检得稳 · 方得优 · 艺得精 · 规得住</div>
+    </div>
+  </header>
+
+  <!-- PAIN -->
+  <section id="pain">
+    <div class="wrap">
+      <div class="eyebrow">01 · 为什么需要</div>
+      <h2>制造企业不缺系统，缺跟着车间走的决策闭环</h2>
+      <p class="lead">从交期到设备、从质量到规范，痛点往往不在「有没有软件」，而在决策链条是否对得上现场。</p>
+      <div class="pain-grid">
+        <div class="pain-card">
+          <strong>交期靠人脑、插单靠吼</strong>
+          <p>计划一改全乱，争机抢人加班却仍延误。</p>
+        </div>
+        <div class="pain-card">
+          <strong>设备坏了才知道</strong>
+          <p>非计划停机、备件被动、产能承诺失信。</p>
+        </div>
+        <div class="pain-card">
+          <strong>质检在事后、标准在纸上</strong>
+          <p>批次风险后置，经验难以复制。</p>
+        </div>
+        <div class="pain-card">
+          <strong>配方工艺靠老师傅</strong>
+          <p>换人就波动，优化难沉淀、难复用。</p>
+        </div>
+        <div class="pain-card">
+          <strong>操作规范难落地</strong>
+          <p>培训成本高，同类失误反复发生。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="arch" style="background:#fff;border-block:1px solid var(--line)">
+    <div class="wrap">
+      <div class="eyebrow">02 · 产品架构</div>
+      <h2>平台壳 + 六大能力域 · 可分可合</h2>
+      <p class="lead">统一账号、组织与权限；业务按模块开通。未购模块不进菜单、不开放接口。</p>
+
+      <div class="arch">
+        <div>
+          <svg viewBox="0 0 640 280" width="100%" height="auto" role="img" aria-label="平台与六大能力域架构图">
+            <rect x="40" y="20" width="560" height="64" rx="6" fill="#1e3a5f"/>
+            <text x="320" y="48" text-anchor="middle" fill="#fff" font-size="18" font-family="Noto Sans SC, sans-serif" font-weight="700">元启·工小智 平台壳</text>
+            <text x="320" y="70" text-anchor="middle" fill="#99f6e4" font-size="12" font-family="Noto Sans SC, sans-serif">多租户 · 组织权限 · 菜单/SKU · 审计</text>
+            <line x1="320" y1="84" x2="320" y2="118" stroke="#94a3b8" stroke-width="2"/>
+            <line x1="70" y1="118" x2="570" y2="118" stroke="#94a3b8" stroke-width="2"/>
+            <g font-family="Noto Sans SC, sans-serif" text-anchor="middle">
+              <g>
+                <line x1="70" y1="118" x2="70" y2="140" stroke="#94a3b8" stroke-width="2"/>
+                <rect x="20" y="140" width="100" height="88" rx="5" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+                <text x="70" y="172" font-size="20" font-weight="700" fill="#0f766e">智排</text>
+                <text x="70" y="194" font-size="11" fill="#3d4f66">智能排产</text>
+                <text x="70" y="214" font-size="11" font-weight="600" fill="#0f766e">可售</text>
+              </g>
+              <g>
+                <line x1="170" y1="118" x2="170" y2="140" stroke="#94a3b8" stroke-width="2"/>
+                <rect x="120" y="140" width="100" height="88" rx="5" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+                <text x="170" y="172" font-size="20" font-weight="700" fill="#0f766e">工诊</text>
+                <text x="170" y="194" font-size="11" fill="#3d4f66">设备健康分析</text>
+                <text x="170" y="214" font-size="11" font-weight="600" fill="#0f766e">可售</text>
+              </g>
+              <g>
+                <line x1="270" y1="118" x2="270" y2="140" stroke="#94a3b8" stroke-width="2"/>
+                <rect x="220" y="140" width="100" height="88" rx="5" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+                <text x="270" y="172" font-size="20" font-weight="700" fill="#0f766e">智检</text>
+                <text x="270" y="194" font-size="11" fill="#3d4f66">工业质检</text>
+                <text x="270" y="214" font-size="11" font-weight="600" fill="#0f766e">可售</text>
+              </g>
+              <g>
+                <line x1="370" y1="118" x2="370" y2="140" stroke="#94a3b8" stroke-width="2"/>
+                <rect x="320" y="140" width="100" height="88" rx="5" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+                <text x="370" y="172" font-size="20" font-weight="700" fill="#0f766e">智方</text>
+                <text x="370" y="194" font-size="11" fill="#3d4f66">配方优化</text>
+                <text x="370" y="214" font-size="11" font-weight="600" fill="#0f766e">可售</text>
+              </g>
+              <g>
+                <line x1="470" y1="118" x2="470" y2="140" stroke="#94a3b8" stroke-width="2"/>
+                <rect x="420" y="140" width="100" height="88" rx="5" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+                <text x="470" y="172" font-size="20" font-weight="700" fill="#0f766e">智艺</text>
+                <text x="470" y="194" font-size="11" fill="#3d4f66">工艺优化</text>
+                <text x="470" y="214" font-size="11" font-weight="600" fill="#0f766e">可售</text>
+              </g>
+              <g>
+                <line x1="570" y1="118" x2="570" y2="140" stroke="#94a3b8" stroke-width="2"/>
+                <rect x="520" y="140" width="100" height="88" rx="5" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+                <text x="570" y="172" font-size="20" font-weight="700" fill="#0f766e">智规</text>
+                <text x="570" y="194" font-size="11" fill="#3d4f66">操作流程规范</text>
+                <text x="570" y="214" font-size="11" font-weight="600" fill="#0f766e">可售</text>
+              </g>
+            </g>
+          </svg>
+
+          <div class="module-strip">
+            <a class="mod-chip live" href="modules/zhipai.html" style="text-decoration:none;color:inherit"><div class="name">智排</div><div class="full">智能排产模块</div><div class="st" style="color:var(--live)">单册 →</div></a>
+            <a class="mod-chip live" href="modules/gongzhen.html" style="text-decoration:none;color:inherit"><div class="name">工诊</div><div class="full">设备健康分析模块</div><div class="st" style="color:var(--live)">单册 →</div></a>
+            <a class="mod-chip live" href="modules/zhijian.html" style="text-decoration:none;color:inherit"><div class="name">智检</div><div class="full">工业质检模块</div><div class="st" style="color:var(--live)">单册 →</div></a>
+            <a class="mod-chip live" href="modules/zhifang.html" style="text-decoration:none;color:inherit"><div class="name">智方</div><div class="full">配方优化模块</div><div class="st" style="color:var(--live)">单册 →</div></a>
+            <a class="mod-chip live" href="modules/zhiyi.html" style="text-decoration:none;color:inherit"><div class="name">智艺</div><div class="full">工艺优化模块</div><div class="st" style="color:var(--live)">单册 →</div></a>
+            <a class="mod-chip live" href="modules/zhigui.html" style="text-decoration:none;color:inherit"><div class="name">智规</div><div class="full">操作流程规范模块</div><div class="st" style="color:var(--live)">单册 →</div></a>
+          </div>
+        </div>
+        <figure class="arch-visual">
+          <img src="assets/gongxiaozhi-modules.jpg" alt="六大能力域产品架构示意：平台壳与智排、工诊、智检、智方、智艺、智规" />
+        </figure>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:28px">
+        <div class="pain-card" style="border-left-color:var(--teal)">
+          <strong>可分</strong>
+          <p>任一能力域可单独采购、单独上线、单独授权。</p>
+        </div>
+        <div class="pain-card" style="border-left-color:var(--teal)">
+          <strong>可合</strong>
+          <p>共用平台壳；合买强调数据对齐与业务闭环。</p>
+        </div>
+        <div class="pain-card" style="border-left-color:var(--teal)">
+          <strong>可演进</strong>
+          <p>按痛点分期开通：交期、设备、质量、配方、工艺、规范，节奏由工厂决定。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULES -->
+  <section id="modules">
+    <div class="wrap">
+      <div class="eyebrow">03 · 六大能力域</div>
+      <h2>可分可合，按痛点选模块</h2>
+      <p class="lead">六大能力共用同一平台壳与组织权限，均可独立采购；合买强调数据对齐与业务闭环。</p>
+
+      <figure class="dual-hero">
+        <img src="assets/gongxiaozhi-dual.jpg" alt="智排与工诊双场景：排产甘特与设备诊断" />
+      </figure>
+
+      <div class="feature-grid">
+        <!-- 智排 -->
+        <article class="feature" id="mod-zhipai">
+          <header>
+            <div>
+              <div class="eyebrow" style="margin:0">智排</div>
+              <h3>智能排产模块</h3>
+            </div>
+            <a class="tag live" href="modules/zhipai.html" style="text-decoration:none">可售 · 单册</a>
+          </header>
+          <p class="slogan">把交期、人、机、班次一次排清：插单可试、冲突可分、现场可报。</p>
+          <div class="flow">
+            <span>基础数据</span><i>→</i>
+            <span>工单管理</span><i>→</i>
+            <span>排产甘特</span><i>→</i>
+            <span>工序报工</span>
+          </div>
+          <ul class="bullet">
+            <li><b>人 / 技能+设备池 / 甘特落机</b> 三层清晰，周历管人、甘特管机</li>
+            <li><b>冲突分档</b>：抢机硬冲突 vs 同班串行超载告警，贴近车间习惯</li>
+            <li><b>试排沙箱 + 多策略重排 + 影响预览</b>，插单敢改、敢看后果再发布</li>
+            <li><b>报工签字 + 偏差处置</b>，计划到现场同体系闭环</li>
+            <li>可单买：不依赖其他模块也能表达占用与空闲</li>
+          </ul>
+          <table class="compare">
+            <thead>
+              <tr><th>维度</th><th>常见做法</th><th>智排</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>人机关系</td><td>混在一张表</td><td class="ours">分层清晰</td></tr>
+              <tr><td>冲突</td><td>事后发现 / 一刀切</td><td class="ours">硬冲突 / 超载分档</td></tr>
+              <tr><td>插单</td><td>改死难回退</td><td class="ours">试排 + 预览 + 发布</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <!-- 工诊 -->
+        <article class="feature" id="mod-gongzhen">
+          <header>
+            <div>
+              <div class="eyebrow" style="margin:0">工诊</div>
+              <h3>设备健康分析模块</h3>
+            </div>
+            <a class="tag live" href="modules/gongzhen.html" style="text-decoration:none">可售 · 单册</a>
+          </header>
+          <p class="slogan">先看清坏在哪，再看会不会坏，最后在安全边界内把设备用好。</p>
+          <div class="flow">
+            <span>采集配置</span><i>→</i>
+            <span>机队视图</span><i>→</i>
+            <span>分析诊断</span><i>→</i>
+            <span>预测 / 优化</span>
+          </div>
+          <ul class="bullet">
+            <li><b>现状健康 vs 未来风险</b> 同屏分口径，不揉成一个红黄绿</li>
+            <li>单机路径：<b>证据 → 对照 → 处置 → 预测 / 优化</b></li>
+            <li>机队视角：部门范围、类型趋势、事件队列，再下钻单机</li>
+            <li>运行优化带约束：异常未处理时阻断激进调参</li>
+            <li>可单买：独立建设采集—诊断—预测—优化链路</li>
+          </ul>
+          <table class="compare">
+            <thead>
+              <tr><th>维度</th><th>常见做法</th><th>工诊</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>输出</td><td>告警列表</td><td class="ours">证据链 + 处置</td></tr>
+              <tr><td>时间</td><td>多为现状</td><td class="ours">现状与未来分口径</td></tr>
+              <tr><td>优化</td><td>少或无约束</td><td class="ours">带状态约束调优</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <!-- 智检 -->
+        <article class="feature" id="mod-zhijian">
+          <header>
+            <div>
+              <div class="eyebrow" style="margin:0">智检</div>
+              <h3>工业质检模块</h3>
+            </div>
+            <a class="tag live" href="modules/zhijian.html" style="text-decoration:none">可售 · 单册</a>
+          </header>
+          <p class="slogan">把质量从事后判废，前移到过程可检、结果可追溯、异常可闭环。</p>
+          <div class="flow">
+            <span>检验方案</span><i>→</i>
+            <span>过程 / 成品检</span><i>→</i>
+            <span>判定与处置</span><i>→</i>
+            <span>批次追溯</span>
+          </div>
+          <ul class="bullet">
+            <li>支持过程检、成品检、抽样与全检策略，按工序 / 批次挂接工单</li>
+            <li><b>不合格闭环</b>：隔离、让步、返工、报废可配置，责任可追溯</li>
+            <li>检验记录、影像 / 数据证据与质量报告一键归档</li>
+            <li>质量看板：不良分布、逃逸风险、供应商 / 班组对比</li>
+            <li>可单买；与智排合买时，质检结果驱动放行与返工重排</li>
+          </ul>
+          <table class="compare">
+            <thead>
+              <tr><th>维度</th><th>常见做法</th><th>智检</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>时机</td><td>事后抽检</td><td class="ours">过程 + 成品闭环</td></tr>
+              <tr><td>追溯</td><td>纸质 / 分散表</td><td class="ours">批次证据一体</td></tr>
+              <tr><td>处置</td><td>口头协商</td><td class="ours">可配置闭环</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <!-- 智方 -->
+        <article class="feature" id="mod-zhifang">
+          <header>
+            <div>
+              <div class="eyebrow" style="margin:0">智方</div>
+              <h3>配方优化模块</h3>
+            </div>
+            <a class="tag live" href="modules/zhifang.html" style="text-decoration:none">可售 · 单册</a>
+          </header>
+          <p class="slogan">在成本、质量与供应约束下，把配方从老师傅经验变成可复制、可审计的资产。</p>
+          <div class="flow">
+            <span>配方版本</span><i>→</i>
+            <span>约束建模</span><i>→</i>
+            <span>试验 / 优化</span><i>→</i>
+            <span>量产切换</span>
+          </div>
+          <ul class="bullet">
+            <li>配方主数据与版本管理：草稿、试验、量产、冻结可区分</li>
+            <li>目标与约束可配置（成本、性能、稳定性、关键原料可用性等）</li>
+            <li><b>可解释优化建议</b>：给出调整方向与预期影响，便于评审签核</li>
+            <li>试验批结果回写，驱动下一轮配方迭代</li>
+            <li>可单买；与智检 / 智艺合买时形成「方—检—艺」闭环</li>
+          </ul>
+          <table class="compare">
+            <thead>
+              <tr><th>维度</th><th>常见做法</th><th>智方</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>沉淀</td><td>个人经验</td><td class="ours">版本化资产</td></tr>
+              <tr><td>优化</td><td>试错靠感觉</td><td class="ours">约束下可解释</td></tr>
+              <tr><td>切换</td><td>口头通知</td><td class="ours">签核后量产切换</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <!-- 智艺 -->
+        <article class="feature" id="mod-zhiyi">
+          <header>
+            <div>
+              <div class="eyebrow" style="margin:0">智艺</div>
+              <h3>工艺优化模块</h3>
+            </div>
+            <a class="tag live" href="modules/zhiyi.html" style="text-decoration:none">可售 · 单册</a>
+          </header>
+          <p class="slogan">盯住关键工序的工艺窗口与节拍稳定性，减少「同设备、不同人、不同结果」。</p>
+          <div class="flow">
+            <span>参数采集</span><i>→</i>
+            <span>黄金批次</span><i>→</i>
+            <span>窗口推荐</span><i>→</i>
+            <span>偏移预警</span>
+          </div>
+          <ul class="bullet">
+            <li>关键工序工艺参数采集与对照，建立黄金批次基线</li>
+            <li><b>工艺窗口推荐</b>：在质量与节拍约束下给出可执行参数带</li>
+            <li>过程偏移预警：偏离窗口及时提示，避免大批量不良</li>
+            <li>与设备工况、质检结果联合分析，区分「机」与「艺」问题</li>
+            <li>可单买；与智排合买时，节拍变化可反馈标准工时</li>
+          </ul>
+          <table class="compare">
+            <thead>
+              <tr><th>维度</th><th>常见做法</th><th>智艺</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>标准</td><td>口头传艺</td><td class="ours">窗口 + 基线</td></tr>
+              <tr><td>波动</td><td>事后复盘</td><td class="ours">偏移即时预警</td></tr>
+              <tr><td>归因</td><td>人机混谈</td><td class="ours">可联合设备 / 质检</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <!-- 智规 -->
+        <article class="feature" id="mod-zhigui">
+          <header>
+            <div>
+              <div class="eyebrow" style="margin:0">智规</div>
+              <h3>操作流程规范模块</h3>
+            </div>
+            <a class="tag live" href="modules/zhigui.html" style="text-decoration:none">可售 · 单册</a>
+          </header>
+          <p class="slogan">把 SOP 从墙上的文件，变成可执行、可培训、可检查、可追溯的现场动作。</p>
+          <div class="flow">
+            <span>规范编制</span><i>→</i>
+            <span>生效发布</span><i>→</i>
+            <span>现场执行</span><i>→</i>
+            <span>稽核改进</span>
+          </div>
+          <ul class="bullet">
+            <li>覆盖开班、换型、点检、保养、安全等高频作业规范</li>
+            <li><b>步骤级执行</b>：关键点确认、拍照 / 签字、偏离记录</li>
+            <li>版本生效与回收：现场只看见当前有效版本</li>
+            <li>培训考核与执行合规分析，同类失误可定位到步骤</li>
+            <li>可单买；与智排 / 工诊合买时，派工与点检动作绑定规范</li>
+          </ul>
+          <table class="compare">
+            <thead>
+              <tr><th>维度</th><th>常见做法</th><th>智规</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>载体</td><td>纸质 / PDF</td><td class="ours">可执行流程</td></tr>
+              <tr><td>执行</td><td>靠自觉</td><td class="ours">步骤确认可追溯</td></tr>
+              <tr><td>改进</td><td>难定位</td><td class="ours">偏离到步骤</td></tr>
+            </tbody>
+          </table>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMBO -->
+  <section id="combo" style="background:#fff;border-block:1px solid var(--line)">
+    <div class="wrap">
+      <div class="eyebrow">04 · 合买价值</div>
+      <h2>同一套平台，多种组合打法</h2>
+      <p class="lead">模块边界清晰、编码与组织对齐——合买强调决策用同一套事实，而不是功能堆砌。</p>
+
+      <div class="combo-board">
+        <div class="combo-side">
+          <span class="tag live">智排</span>
+          <h3 style="margin-top:10px">计划占用与派工</h3>
+          <ul class="bullet">
+            <li>谁在哪班、占哪台机</li>
+            <li>交期、冲突、负荷</li>
+            <li>报工与偏差</li>
+          </ul>
+        </div>
+        <div class="combo-plus" aria-hidden="true">+</div>
+        <div class="combo-side">
+          <span class="tag live">工诊</span>
+          <h3 style="margin-top:10px">健康、预测与优化</h3>
+          <ul class="bullet">
+            <li>关键机是否健康</li>
+            <li>未来风险与 RUL</li>
+            <li>约束下的运行建议</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="combo-result">
+        <strong>智排 × 工诊增量</strong>
+        <p class="muted" style="margin:8px 0 0">
+          <b>敢排</b>——高风险机避免仍被高负荷占用；
+          <b>敢养</b>——维修窗口对照交期与班次；
+          <b>对齐</b>——排产会与维修会用同一套设备事实。
+        </p>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:18px">
+        <div class="combo-side">
+          <span class="tag live">智检 × 智排</span>
+          <p class="muted" style="margin:10px 0 0;font-size:14px">质检结果驱动放行、返工工单与交期重排，质量不再游离在计划之外。</p>
+        </div>
+        <div class="combo-side">
+          <span class="tag live">智方 × 智艺 × 智检</span>
+          <p class="muted" style="margin:10px 0 0;font-size:14px">配方调整 → 工艺窗口 → 实测验证，经验沉淀为可复用闭环。</p>
+        </div>
+        <div class="combo-side">
+          <span class="tag live">智规 × 任意模块</span>
+          <p class="muted" style="margin:10px 0 0;font-size:14px">开班、换型、点检、检验动作与规范绑定，标准真正落到现场。</p>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="n">01</div>
+          <h3>交期与设备</h3>
+          <p class="muted" style="margin:0;font-size:14px">智排控交期人机争用；工诊管关键机健康与风险。</p>
+        </div>
+        <div class="step">
+          <div class="n">02</div>
+          <h3>质量与工艺</h3>
+          <p class="muted" style="margin:0;font-size:14px">智检前移质量；智方 / 智艺沉淀配方与工艺窗口。</p>
+        </div>
+        <div class="step">
+          <div class="n">03</div>
+          <h3>现场规范</h3>
+          <p class="muted" style="margin:0;font-size:14px">智规把 SOP 变成可执行动作，与派工 / 点检对齐。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PACKAGES -->
+  <section id="packages" style="background:#fff;border-top:1px solid var(--line)">
+    <div class="wrap">
+      <div class="eyebrow">05 · 组合方案</div>
+      <h2>按痛点选包，降低决策门槛</h2>
+      <table class="pkg-table">
+        <thead>
+          <tr>
+            <th>方案包</th>
+            <th>包含模块</th>
+            <th>适合谁</th>
+            <th>一句话</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>交期守护</b></td>
+            <td>智排</td>
+            <td>计划乱、插单多</td>
+            <td>先把人机班次与报工闭环立住</td>
+          </tr>
+          <tr>
+            <td><b>关键设备守护</b></td>
+            <td>工诊</td>
+            <td>停机贵、告警噪</td>
+            <td>从告警升级到可解释诊断与约束优化</td>
+          </tr>
+          <tr>
+            <td><b>排产 × 健康</b></td>
+            <td>智排 + 工诊</td>
+            <td>交期与设备都痛</td>
+            <td>计划产能与设备风险对齐决策</td>
+          </tr>
+          <tr>
+            <td><b>质量升级</b></td>
+            <td>智检（+可选智排）</td>
+            <td>不良后置、追溯弱</td>
+            <td>过程可检、批次可追、异常可闭环</td>
+          </tr>
+          <tr>
+            <td><b>工艺配方升级</b></td>
+            <td>智方 + 智艺（+可选智检）</td>
+            <td>经验型工艺</td>
+            <td>配方可审计、工艺有窗口、实测可验证</td>
+          </tr>
+          <tr>
+            <td><b>现场规范升级</b></td>
+            <td>智规（+任意生产模块）</td>
+            <td>标准难落地</td>
+            <td>SOP 可执行、可培训、可稽核</td>
+          </tr>
+          <tr>
+            <td><b>工小智完整域</b></td>
+            <td>六大能力域</td>
+            <td>集团规划型客户</td>
+            <td>统一平台，按工厂节奏分期开通</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="combo-side">
+          <h3>交付方式</h3>
+          <ul class="bullet">
+            <li><b>远程开通（托管）</b>：按租户开通已购模块</li>
+            <li><b>代码交付（本地）</b>：平台壳 + 已购模块打包</li>
+            <li>支持整站或嵌入客户门户</li>
+          </ul>
+        </div>
+        <div class="combo-side">
+          <h3>合同物料名</h3>
+          <ul class="bullet">
+            <li>智能排产模块（智排）</li>
+            <li>设备健康分析模块（工诊）</li>
+            <li>工业质检模块（智检）</li>
+            <li>配方优化模块（智方）· 工艺优化模块（智艺）· 操作流程规范模块（智规）</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="big">元启·工小智 — 可生长的工业智能作业平台</div>
+      <p>智排管交期，工诊管设备，智检管质量，智方 / 智艺管配方与工艺，智规管现场动作——同一平台，按需开通。</p>
+      <p style="margin-top:16px">完整文字版：<code>docs/product/元启工小智-产品宣传.md</code> · 本页：<code>docs/product/brochure/index.html</code></p>
+      <p>文档版本 v0.2 · 可用浏览器打开，或点击右上角「打印 / PDF」导出</p>
+    </div>
+  </footer>
+</body>
+</html>

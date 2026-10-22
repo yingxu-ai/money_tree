@@ -10,6 +10,7 @@ import {
   PageHeader,
   StatusTag,
 } from "@/components/kit";
+import OperatingTenantBanner from "@/components/OperatingTenantBanner";
 import { useMutation } from "@/hooks/useMutation";
 import { useRequest } from "@/hooks/useRequest";
 import type { DeptItem } from "@/types";
@@ -62,6 +63,7 @@ export default function DeptsPage() {
 
   return (
     <div>
+      <OperatingTenantBanner />
       <PageHeader
         title="部门管理"
         extra={

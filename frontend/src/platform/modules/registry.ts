@@ -2,7 +2,6 @@ import { schedulingModule } from "@/modules/scheduling/register";
 import { toolboxModule } from "@/modules/toolbox/register";
 import { systemModule } from "@/modules/system/register";
 import { dashboardModule } from "@/modules/dashboard/register";
-import { demoModule } from "@/modules/demo/register";
 import { equipmentAnalysisModule } from "@/modules/equipment-analysis/register";
 import { getActiveEdition, isModuleEnabled } from "@/platform/edition";
 import type { ModuleRoute } from "@/platform/modules/types";
@@ -10,7 +9,6 @@ import type { ModuleRoute } from "@/platform/modules/types";
 const ALL_MODULES = [
   systemModule,
   dashboardModule,
-  demoModule,
   equipmentAnalysisModule,
   schedulingModule,
   toolboxModule,
@@ -27,7 +25,9 @@ export function getEnabledModuleRoutes(): ModuleRoute[] {
 /** 按租户 SKU 选默认首页 */
 export function getDefaultHomePathForUser(
   enabledModules?: string[] | null,
+  isPlatformAdmin?: boolean,
 ): string {
+  if (isPlatformAdmin) return "/system/tenants";
   const routes = getEnabledModuleRoutes().filter(
     (r) => enabledModules == null || enabledModules.includes(r.moduleId),
   );

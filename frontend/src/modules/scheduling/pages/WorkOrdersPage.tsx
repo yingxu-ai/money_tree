@@ -1,4 +1,20 @@
-import { Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tag, Tooltip } from "antd";
+import {
+  Button,
+  Card,
+  Col,
+  DatePicker,
+  Drawer,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Row,
+  Select,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import {
   DeleteOutlined,
   EditOutlined,
@@ -26,10 +42,11 @@ import {
   WO_STATUS_LABEL,
   type WorkOrderItem,
 } from "@/modules/scheduling/api/scheduling";
-import { KpiRow } from "@/components/blocks";
 import { DataTable, DeleteAction, FormModal, PageHeader, StatusTag } from "@/components/kit";
 import { useMutation } from "@/hooks/useMutation";
 import { useRequest } from "@/hooks/useRequest";
+
+const STATUS_CHIP_KEYS = ["pending", "producing", "done", "cancelled"] as const;
 
 type OpSpecForm = {
   template_id: string;
@@ -55,6 +72,36 @@ export default function WorkOrdersPage() {
   const sourceType = Form.useWatch("source_type", form);
   const woKind = Form.useWatch("wo_kind", form);
   const editWoKind = Form.useWatch("wo_kind", editForm);
+
+  const overview = useMemo(() => {
+    const rows = data?.items ?? [];
+    const total = rows.length;
+    const cancelled = rows.filter((r) => r.status === "cancelled").length;
+    const active = total - cancelled;
+    const pending = rows.filter((r) => r.status === "pending").length;
+    const producing = rows.filter((r) => r.status === "producing").length;
+    const done = rows.filter((r) => r.status === "done").length;
+    const orders = data?.orders ?? [];
+    const customerN = orders.filter((o) => o.source_type === "customer").length;
+    const internalN = orders.length - customerN;
+    return {
+      total,
+      cancelled,
+      active,
+      pending,
+      producing,
+      done,
+      orderCount: orders.length,
+      customerN,
+      internalN,
+      byStatus: {
+        pending,
+        producing,
+        done,
+        cancelled,
+      } as Record<string, number>,
+    };
+  }, [data?.items, data?.orders]);
 
   const items = useMemo(() => {
     let rows = data?.items ?? [];
@@ -204,7 +251,7 @@ export default function WorkOrdersPage() {
     <div>
       <PageHeader
         title="工单管理"
-        subtitle="录入错误可作废（撤出排产、保留台账）或删除（仅待排产/已作废且无完工实绩）。"
+        subtitle=""
         extra={
           <Button
             type="primary"
@@ -230,7 +277,60 @@ export default function WorkOrdersPage() {
           </Button>
         }
       />
-      <KpiRow items={data?.kpis ?? []} loading={loading && !data} />
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }} align="stretch">
+        <Col xs={24} md={14} style={{ display: "flex" }}>
+          <Card size="small" loading={loading && !data} style={{ width: "100%", minHeight: 108 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              工单总览
+            </Typography.Text>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 600, lineHeight: 1.3 }}>
+              全部 {overview.total}
+              <Typography.Text type="secondary" style={{ fontSize: 14, fontWeight: 400, marginLeft: 8 }}>
+                （作废 {overview.cancelled}）
+              </Typography.Text>
+            </div>
+            <Typography.Paragraph style={{ margin: "8px 0 0", fontSize: 13 }} type="secondary">
+              有效 <Typography.Text strong>{overview.active}</Typography.Text>
+              {" = "}
+              待排产 {overview.pending}
+              {" · "}
+              生产中 {overview.producing}
+              {" · "}
+              已完成 {overview.done}
+            </Typography.Paragraph>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              订单 / 任务 {overview.orderCount}
+              （客户 {overview.customerN} · 内部 {overview.internalN}）
+            </Typography.Text>
+          </Card>
+        </Col>
+        <Col xs={24} md={10} style={{ display: "flex" }}>
+          <Card size="small" loading={loading && !data} style={{ width: "100%", minHeight: 108 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              按状态筛选（点击过滤列表）
+            </Typography.Text>
+            <Space wrap size={[8, 8]} style={{ marginTop: 12 }}>
+              <Tag.CheckableTag
+                checked={!statusFilter}
+                onChange={(checked) => {
+                  if (checked) setStatusFilter(undefined);
+                }}
+              >
+                全部 {overview.total}
+              </Tag.CheckableTag>
+              {STATUS_CHIP_KEYS.map((key) => (
+                <Tag.CheckableTag
+                  key={key}
+                  checked={statusFilter === key}
+                  onChange={(checked) => setStatusFilter(checked ? key : undefined)}
+                >
+                  {WO_STATUS_LABEL[key]} {overview.byStatus[key] ?? 0}
+                </Tag.CheckableTag>
+              ))}
+            </Space>
+          </Card>
+        </Col>
+      </Row>
 
       <DataTable<WorkOrderItem>
         rowKey="id"
@@ -275,17 +375,6 @@ export default function WorkOrdersPage() {
               value={priorityFilter}
               onChange={setPriorityFilter}
               options={Object.entries(PRIORITY_LABEL).map(([value, label]) => ({
-                value,
-                label,
-              }))}
-            />
-            <Select
-              allowClear
-              placeholder="状态"
-              style={{ width: 120 }}
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={Object.entries(WO_STATUS_LABEL).map(([value, label]) => ({
                 value,
                 label,
               }))}

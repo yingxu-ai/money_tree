@@ -19,6 +19,12 @@ class UserInfo(BaseModel):
     email: str | None
     avatar_url: str | None = None
     tenant_id: int
+    tenant_code: str | None = None
+    tenant_name: str | None = None
+    is_platform_admin: bool = False
+    operating_tenant_id: int | None = None
+    operating_tenant_code: str | None = None
+    operating_tenant_name: str | None = None
     dept_id: int | None = None
     dept_name: str | None = None
     status: str = "active"
@@ -95,6 +101,7 @@ class RoleCreate(BaseModel):
     data_scope: str = "ALL"
     menu_ids: list[int] = Field(default_factory=list)
     permission_ids: list[int] = Field(default_factory=list)
+    api_permission_ids: list[int] = Field(default_factory=list)
 
 
 class RoleUpdate(BaseModel):
@@ -103,6 +110,7 @@ class RoleUpdate(BaseModel):
     data_scope: str | None = None
     menu_ids: list[int] | None = None
     permission_ids: list[int] | None = None
+    api_permission_ids: list[int] | None = None
 
 
 class RoleOut(BaseModel):
@@ -113,6 +121,7 @@ class RoleOut(BaseModel):
     data_scope: str
     menu_ids: list[int] = Field(default_factory=list)
     permission_ids: list[int] = Field(default_factory=list)
+    api_permission_ids: list[int] = Field(default_factory=list)
 
 
 class MenuCreate(BaseModel):

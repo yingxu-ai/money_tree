@@ -1,3 +1,6 @@
+import asyncio
+import json
+import re
 import time
 import uuid
 
@@ -6,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.logging import get_logger
+
 
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 AUDIT_SKIP_PREFIXES = (
@@ -16,6 +20,31 @@ AUDIT_SKIP_PREFIXES = (
     "/api/v1/public",
     "/api/v1/audit",
 )
+# 登录已有 SysLoginLog；再写操作审计易与同请求会话叠锁，且 body 含密码
+AUDIT_SKIP_PATHS = (
+    "/api/v1/auth/login",
+)
+
+_SENSITIVE_KEY = re.compile(r"(password|passwd|pwd|secret|token|credential)", re.I)
+
+
+def _redact_body(preview: str | None) -> str | None:
+    if not preview:
+        return preview
+    try:
+        data = json.loads(preview)
+        if isinstance(data, dict):
+            for key in list(data):
+                if _SENSITIVE_KEY.search(str(key)):
+                    data[key] = "***"
+            return json.dumps(data, ensure_ascii=False)[:500]
+    except Exception:
+        pass
+    return re.sub(
+        r'(?i)("(?:password|passwd|pwd|secret|token)"\s*:\s*")[^"]*',
+        r"\1***",
+        preview,
+    )[:500]
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -27,15 +56,20 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         request.state.start_time = time.perf_counter()
 
         body_preview = None
-        should_audit = request.method in WRITE_METHODS and not any(
-            request.url.path.startswith(p) for p in AUDIT_SKIP_PREFIXES
+        path = request.url.path
+        should_audit = (
+            request.method in WRITE_METHODS
+            and path not in AUDIT_SKIP_PATHS
+            and not any(path.startswith(p) for p in AUDIT_SKIP_PREFIXES)
         )
         content_type = request.headers.get("content-type", "")
         # 上传文件不缓存 body，避免大文件内存占用与破坏流
         if should_audit and "multipart/form-data" not in content_type:
             try:
                 raw = await request.body()
-                body_preview = raw.decode("utf-8", errors="ignore")[:500] if raw else None
+                body_preview = _redact_body(
+                    raw.decode("utf-8", errors="ignore")[:500] if raw else None
+                )
 
                 async def receive():
                     return {"type": "http.request", "body": raw, "more_body": False}
@@ -61,13 +95,17 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         )
 
         if should_audit:
-            await self._write_audit(
-                path=request.url.path,
-                method=request.method,
-                status_code=response.status_code,
-                body_preview=body_preview or (f"[multipart] {request.url.path}" if "multipart" in content_type else None),
-                user_id=user_id,
-                trace_id=trace_id,
+            # 不阻塞响应：SQLite 下与请求内写会话叠锁时，同步 await 可拖到数秒
+            asyncio.create_task(
+                self._write_audit(
+                    path=path,
+                    method=request.method,
+                    status_code=response.status_code,
+                    body_preview=body_preview
+                    or (f"[multipart] {path}" if "multipart" in content_type else None),
+                    user_id=user_id,
+                    trace_id=trace_id,
+                )
             )
 
         response.headers["X-Trace-Id"] = trace_id

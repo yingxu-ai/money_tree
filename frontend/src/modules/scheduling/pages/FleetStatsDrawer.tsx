@@ -1,6 +1,7 @@
-import { Button, Drawer, Select, Space, Table, Tag, Typography } from "antd";
+import { Button, DatePicker, Drawer, Select, Space, Table, Tag, Typography } from "antd";
 import type { EChartsOption } from "echarts";
 import ReactECharts from "echarts-for-react";
+import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { PieChart } from "@/charts";
@@ -271,6 +272,7 @@ export default function FleetStatsDrawer({
   const [sourceFilter, setSourceFilter] = useState<string | undefined>();
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [dueFilter, setDueFilter] = useState<DueBucket | undefined>();
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null);
 
   const conflictByCode = useMemo(() => {
     const map = new Map<string, number>();
@@ -290,13 +292,20 @@ export default function FleetStatsDrawer({
   );
 
   const aggs = useMemo(() => {
+    const rs = dateRange?.[0]?.format("YYYY-MM-DD");
+    const re = dateRange?.[1]?.format("YYYY-MM-DD");
     return allAggs.filter((a) => {
       if (sourceFilter && a.source_type !== sourceFilter) return false;
       if (statusFilter && a.status !== statusFilter) return false;
       if (dueFilter && a.due_bucket !== dueFilter) return false;
+      if (rs && re) {
+        const ps = a.plan_start || "";
+        const pe = a.plan_end || ps;
+        if (!ps || pe < rs || ps > re) return false;
+      }
       return true;
     });
-  }, [allAggs, sourceFilter, statusFilter, dueFilter]);
+  }, [allAggs, sourceFilter, statusFilter, dueFilter, dateRange]);
 
   const kpis = useMemo(() => {
     const total = aggs.length;
@@ -384,6 +393,15 @@ export default function FleetStatsDrawer({
     <Drawer title="汇总统计" open={open} onClose={onClose} width={860} destroyOnHidden>
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <Space wrap>
+          <DatePicker.RangePicker
+            allowClear
+            value={dateRange}
+            onChange={(v) =>
+              setDateRange(v && v[0] && v[1] ? [v[0], v[1]] : null)
+            }
+            placeholder={["开始日期", "结束日期"]}
+            style={{ width: 260 }}
+          />
           <Select
             allowClear
             placeholder="来源"
@@ -424,6 +442,7 @@ export default function FleetStatsDrawer({
           />
           <span style={{ fontSize: 12, color: "#718096" }}>
             当前 {aggs.length} / {allAggs.length} 单
+            {dateRange ? "（按计划日期与所选区间有交集）" : ""}
           </span>
         </Space>
 

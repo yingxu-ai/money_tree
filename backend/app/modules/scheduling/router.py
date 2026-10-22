@@ -1,13 +1,17 @@
-"""生产排产 MVP API：快照落库，重启保留；POST /reset 可还原演示 seed。"""
+"""生产排产 API：按租户隔离快照，重启保留。"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
-
-from app.auth.deps import get_current_user
+from app.auth.context import CurrentUser
+from app.auth.deps import get_current_user, require_permission
 from app.core.response import ok
-from app.modules.scheduling.store import store
+from app.modules.scheduling.store import SchedulingStore, get_store
+
+
+def _store(current: CurrentUser = Depends(get_current_user)) -> SchedulingStore:
+    return get_store(current.effective_tenant_id)
 
 router = APIRouter(prefix="/scheduling", tags=["生产排产"])
 
@@ -21,12 +25,31 @@ class PersonUpsert(BaseModel):
     shift_family_ids: list[str] = Field(default_factory=list)
 
 
+class ResourceUpsert(BaseModel):
+    name: str
+    code: str
+    status: str | None = "active"
+    sort: int | None = None
+
+
+class SkillUpsert(BaseModel):
+    name: str
+    code: str
+    status: str | None = "active"
+    sort: int | None = None
+
+
+class ResourceDeleteBody(BaseModel):
+    migrate_to: str | None = None
+
+
 class TemplateUpsert(BaseModel):
     name: str
     std_hours: float = 1.0
     skill_id: str
     prev_template_id: str | None = None
     status: str | None = "active"
+    equipment_ids: list[str] | None = None
 
 
 class ShiftCreate(BaseModel):
@@ -35,6 +58,8 @@ class ShiftCreate(BaseModel):
     start_time: str = "08:00"
     end_time: str = "16:00"
     crosses_midnight: bool | None = None
+    # start_day=开班日；previous_day=前一日（凌晨接续班跟首班生产日）
+    belong_day_rule: str | None = "start_day"
     effective_from: str | None = None
     effective_to: str | None = None
     note: str | None = None
@@ -46,6 +71,7 @@ class ShiftPublish(BaseModel):
     start_time: str | None = None
     end_time: str | None = None
     crosses_midnight: bool | None = None
+    belong_day_rule: str | None = None
     effective_from: str | None = None
     effective_to: str | None = None
     note: str | None = None
@@ -62,6 +88,38 @@ class ShiftAssignmentCreate(BaseModel):
 
 class ShiftAssignmentClose(BaseModel):
     end_date: str | None = None
+
+
+class RosterGenerate(BaseModel):
+    week_start: str | None = None
+    person_ids: list[str] | None = None
+    family_ids: list[str] | None = None
+
+
+class RosterAssign(BaseModel):
+    start_date: str
+    end_date: str
+    shift_family_id: str
+    person_ids: list[str]
+    note: str | None = None
+    week_start: str | None = None
+
+
+class RosterRotate(BaseModel):
+    week_start: str | None = None
+    effective_from: str | None = None
+    end_date: str | None = None
+    person_ids: list[str] | None = None
+    family_ids: list[str] | None = None
+    # 三班倒自定义：{ 旧班 family_id: 新班 family_id }；两班倒可空（自动对换）
+    mapping: dict[str, str] | None = None
+
+
+class RosterDaySet(BaseModel):
+    person_id: str
+    day: str
+    shift_family_id: str | None = None
+    note: str | None = None
 
 
 class WorkOrderCreate(BaseModel):
@@ -98,7 +156,24 @@ class MoveTaskBody(BaseModel):
     duration_days: int | None = None
     plan_segments: list[dict] | None = None
     hours_per_day: float | None = None
+    equipment_id: str | None = None
+    clear_equipment: bool = False
     cascade: bool = True
+    # 按排班重解析各日责任人（拖拽换班/整段平移）
+    resolve_roster: bool = False
+    # 仅补空人的日（拉宽新增格）；与 resolve_roster 同时为真时以 resolve 为准
+    only_fill_empty: bool = False
+    required_headcount: int | None = None
+    # 保存时按负荷重选设备（忽略原机台）
+    auto_equipment: bool = False
+
+
+class EquipmentUpsert(BaseModel):
+    name: str
+    code: str
+    status: str | None = "active"
+    sort: int | None = None
+    resource_id: str | None = None
 
 
 class ScheduleOrderBody(BaseModel):
@@ -127,18 +202,22 @@ class ReassignLeaveBody(BaseModel):
 
 
 @router.post("/reset")
-async def reset_demo(request: Request, _user=Depends(get_current_user)):
-    """恢复演示排产：按今天重铺任务进度与排班故事，保留人员等主数据。"""
+async def reset_baseline(
+    request: Request,
+    _user=Depends(require_permission("scheduling:baseline:restore")),
+    store: SchedulingStore = Depends(_store),
+):
+    """将当前租户的排产数据恢复为内置测试种子（仅影响本租户快照）。"""
     return ok(request, store.reset())
 
 
 @router.get("/master")
-async def master_data(request: Request, _user=Depends(get_current_user)):
+async def master_data(request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.master_overview())
 
 
 @router.post("/leaves")
-async def create_leave(payload: LeaveCreate, request: Request, _user=Depends(get_current_user)):
+async def create_leave(payload: LeaveCreate, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     data = payload.model_dump()
     if not data.get("end_date"):
         data["end_date"] = data["start_date"]
@@ -146,55 +225,172 @@ async def create_leave(payload: LeaveCreate, request: Request, _user=Depends(get
 
 
 @router.post("/leaves/{leave_id}/close")
-async def close_leave(leave_id: str, request: Request, _user=Depends(get_current_user)):
+async def close_leave(leave_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.close_leave(leave_id))
 
 
 @router.post("/leaves/reassign")
 async def reassign_for_leave(
-    payload: ReassignLeaveBody, request: Request, _user=Depends(get_current_user)
-):
+    payload: ReassignLeaveBody, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.reassign_for_leave(payload.model_dump()))
 
 
+@router.post("/resources")
+async def create_resource(
+    payload: ResourceUpsert, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)
+):
+    return ok(request, store.upsert_resource(payload.model_dump()))
+
+
+@router.put("/resources/{resource_id}")
+async def update_resource(
+    resource_id: str,
+    payload: ResourceUpsert,
+    request: Request,
+    _user=Depends(get_current_user),
+    store: SchedulingStore = Depends(_store),
+):
+    return ok(request, store.upsert_resource(payload.model_dump(), resource_id))
+
+
+@router.delete("/resources/{resource_id}")
+async def delete_resource(
+    resource_id: str,
+    request: Request,
+    migrate_to: str | None = Query(None, description="有人员时迁往的目标班组"),
+    _user=Depends(get_current_user),
+    store: SchedulingStore = Depends(_store),
+):
+    return ok(request, store.delete_resource(resource_id, migrate_to=migrate_to))
+
+
+@router.post("/skills")
+async def create_skill(
+    payload: SkillUpsert, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)
+):
+    return ok(request, store.upsert_skill(payload.model_dump()))
+
+
+@router.put("/skills/{skill_id}")
+async def update_skill(
+    skill_id: str,
+    payload: SkillUpsert,
+    request: Request,
+    _user=Depends(get_current_user),
+    store: SchedulingStore = Depends(_store),
+):
+    return ok(request, store.upsert_skill(payload.model_dump(), skill_id))
+
+
+@router.delete("/skills/{skill_id}")
+async def delete_skill(
+    skill_id: str,
+    request: Request,
+    migrate_to: str | None = Query(None, description="有引用时迁往的目标技能"),
+    _user=Depends(get_current_user),
+    store: SchedulingStore = Depends(_store),
+):
+    return ok(request, store.delete_skill(skill_id, migrate_to=migrate_to))
+
+
+@router.post("/equipments")
+async def create_equipment(
+    payload: EquipmentUpsert, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)
+):
+    return ok(request, store.upsert_equipment(payload.model_dump()))
+
+
+@router.put("/equipments/{equipment_id}")
+async def update_equipment(
+    equipment_id: str,
+    payload: EquipmentUpsert,
+    request: Request,
+    _user=Depends(get_current_user),
+    store: SchedulingStore = Depends(_store),
+):
+    return ok(request, store.upsert_equipment(payload.model_dump(), equipment_id))
+
+
+@router.delete("/equipments/{equipment_id}")
+async def delete_equipment(
+    equipment_id: str,
+    request: Request,
+    migrate_to: str | None = Query(None, description="有工序占用时迁往的目标设备"),
+    _user=Depends(get_current_user),
+    store: SchedulingStore = Depends(_store),
+):
+    return ok(request, store.delete_equipment(equipment_id, migrate_to=migrate_to))
+
+
 @router.post("/persons")
-async def create_person(payload: PersonUpsert, request: Request, _user=Depends(get_current_user)):
+async def create_person(payload: PersonUpsert, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.upsert_person(payload.model_dump()))
 
 
 @router.put("/persons/{person_id}")
 async def update_person(
-    person_id: str, payload: PersonUpsert, request: Request, _user=Depends(get_current_user)
-):
+    person_id: str, payload: PersonUpsert, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.upsert_person(payload.model_dump(), person_id))
 
 
 @router.post("/shifts")
-async def create_shift(payload: ShiftCreate, request: Request, _user=Depends(get_current_user)):
+async def create_shift(payload: ShiftCreate, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.create_shift(payload.model_dump()))
+
+
+class ShiftReorder(BaseModel):
+    family_ids: list[str] = Field(default_factory=list)
+
+
+@router.post("/shifts/reorder")
+async def reorder_shifts(payload: ShiftReorder, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    """调整班序：甘特一天 N 段顺序与排产/轮换共用。"""
+    return ok(request, store.reorder_shift_families(payload.family_ids))
 
 
 @router.post("/shifts/{family_id}/versions")
 async def publish_shift_version(
-    family_id: str, payload: ShiftPublish, request: Request, _user=Depends(get_current_user)
-):
+    family_id: str, payload: ShiftPublish, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.publish_shift_version(family_id, payload.model_dump(exclude_none=True)))
 
 
 @router.get("/shifts/{family_id}/history")
-async def shift_history(family_id: str, request: Request, _user=Depends(get_current_user)):
+async def shift_history(family_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.list_shift_history(family_id))
 
 
-@router.delete("/shifts/{family_id}")
-async def delete_shift(family_id: str, request: Request, _user=Depends(get_current_user)):
-    return ok(request, store.delete_shift_family(family_id))
+class ShiftDisable(BaseModel):
+    migrate_to_family_id: str | None = None
 
+
+@router.get("/shifts/{family_id}/usage")
+async def shift_usage(family_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    return ok(request, store.shift_family_usage(family_id))
+
+
+@router.post("/shifts/{family_id}/disable")
+async def disable_shift(
+    family_id: str, payload: ShiftDisable, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    return ok(
+        request,
+        store.delete_shift_family(family_id, migrate_to_family_id=payload.migrate_to_family_id),
+    )
+
+
+@router.delete("/shifts/{family_id}")
+async def delete_shift(
+    family_id: str,
+    request: Request,
+    migrate_to_family_id: str | None = Query(None),
+    _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    return ok(
+        request,
+        store.delete_shift_family(family_id, migrate_to_family_id=migrate_to_family_id),
+    )
 
 @router.post("/shift-assignments")
 async def create_shift_assignment(
-    payload: ShiftAssignmentCreate, request: Request, _user=Depends(get_current_user)
-):
+    payload: ShiftAssignmentCreate, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.create_shift_assignment(payload.model_dump()))
 
 
@@ -203,8 +399,7 @@ async def close_shift_assignment(
     assignment_id: str,
     payload: ShiftAssignmentClose,
     request: Request,
-    _user=Depends(get_current_user),
-):
+    _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(
         request,
         store.close_shift_assignment(assignment_id, end_date=payload.end_date),
@@ -213,59 +408,95 @@ async def close_shift_assignment(
 
 @router.delete("/shift-assignments/{assignment_id}")
 async def delete_shift_assignment(
-    assignment_id: str, request: Request, _user=Depends(get_current_user)
-):
+    assignment_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.delete_shift_assignment(assignment_id))
 
 
+@router.get("/roster/week")
+async def roster_week(
+    request: Request,
+    week_start: str | None = Query(None),
+    _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    return ok(request, store.roster_week(week_start))
+
+
+@router.get("/roster/analysis")
+async def roster_analysis(
+    request: Request,
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
+    _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    return ok(request, store.roster_headcount_analysis(start_date, end_date))
+
+
+@router.post("/roster/generate")
+async def generate_roster(
+    payload: RosterGenerate, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    return ok(request, store.generate_three_shift_roster(payload.model_dump()))
+
+
+@router.post("/roster/assign")
+async def assign_roster(
+    payload: RosterAssign, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    return ok(request, store.assign_roster_batch(payload.model_dump()))
+
+
+@router.post("/roster/rotate")
+async def rotate_roster(
+    payload: RosterRotate, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    return ok(request, store.rotate_roster(payload.model_dump()))
+
+
+@router.post("/roster/day")
+async def set_roster_day(
+    payload: RosterDaySet, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    return ok(request, store.set_roster_day(payload.model_dump()))
+
+
 @router.post("/templates")
-async def create_template(payload: TemplateUpsert, request: Request, _user=Depends(get_current_user)):
+async def create_template(payload: TemplateUpsert, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.upsert_template(payload.model_dump()))
 
 
 @router.put("/templates/{template_id}")
 async def update_template(
-    template_id: str, payload: TemplateUpsert, request: Request, _user=Depends(get_current_user)
-):
+    template_id: str, payload: TemplateUpsert, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.upsert_template(payload.model_dump(), template_id))
 
 
 @router.get("/work-orders")
-async def list_work_orders(request: Request, _user=Depends(get_current_user)):
+async def list_work_orders(request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.work_orders_overview())
 
 
 @router.post("/work-orders")
 async def create_work_order(
-    payload: WorkOrderCreate, request: Request, _user=Depends(get_current_user)
-):
+    payload: WorkOrderCreate, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.create_work_order(payload.model_dump()))
 
 
 @router.put("/work-orders/{wo_id}")
 async def update_work_order(
-    wo_id: str, payload: WorkOrderUpdate, request: Request, _user=Depends(get_current_user)
-):
+    wo_id: str, payload: WorkOrderUpdate, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.update_work_order(wo_id, payload.model_dump(exclude_none=True)))
 
 
 @router.post("/work-orders/{wo_id}/cancel")
-async def cancel_work_order(wo_id: str, request: Request, _user=Depends(get_current_user)):
+async def cancel_work_order(wo_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.cancel_work_order(wo_id))
 
 
 @router.delete("/work-orders/{wo_id}")
-async def delete_work_order(wo_id: str, request: Request, _user=Depends(get_current_user)):
+async def delete_work_order(wo_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.delete_work_order(wo_id))
 
 
 @router.get("/gantt")
 async def gantt(
     request: Request,
-    horizon: str = "focus",
-    _user=Depends(get_current_user),
-):
-    """horizon=focus 以今天为中心；all 右端拉满未完工计划。"""
+    horizon: str = "all",
+    _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
+    """默认 all：当天起右端跟到未完工计划结束；focus 为近景裁剪。"""
     return ok(request, store.gantt_overview(horizon=horizon))
 
 
@@ -276,8 +507,7 @@ class ReplanBody(BaseModel):
 
 @router.post("/gantt/replan")
 async def gantt_replan(
-    request: Request, payload: ReplanBody = ReplanBody(), _user=Depends(get_current_user)
-):
+    request: Request, payload: ReplanBody = ReplanBody(), _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(
         request,
         store.replan(
@@ -289,8 +519,7 @@ async def gantt_replan(
 
 @router.post("/gantt/preview/replan")
 async def preview_replan(
-    request: Request, payload: ReplanBody = ReplanBody(), _user=Depends(get_current_user)
-):
+    request: Request, payload: ReplanBody = ReplanBody(), _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(
         request,
         store.preview_replan(
@@ -301,18 +530,18 @@ async def preview_replan(
 
 
 @router.delete("/orders/{order_id}")
-async def delete_order(order_id: str, request: Request, _user=Depends(get_current_user)):
+async def delete_order(order_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     """甘特误录：无实绩则删除；有进行中/已完工则作废并撤出排产。"""
     return ok(request, store.remove_order(order_id))
 
 
 @router.post("/gantt/undo")
-async def gantt_undo(request: Request, _user=Depends(get_current_user)):
+async def gantt_undo(request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.undo())
 
 
 @router.post("/gantt/redo")
-async def gantt_redo(request: Request, _user=Depends(get_current_user)):
+async def gantt_redo(request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.redo())
 
 
@@ -330,8 +559,7 @@ class ResolveVarianceBody(BaseModel):
 
 @router.put("/gantt/tasks/{op_id}")
 async def move_task(
-    op_id: str, payload: MoveTaskBody, request: Request, _user=Depends(get_current_user)
-):
+    op_id: str, payload: MoveTaskBody, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(
         request,
         store.move_task(
@@ -343,15 +571,20 @@ async def move_task(
             duration_days=payload.duration_days,
             plan_segments=payload.plan_segments,
             hours_per_day=payload.hours_per_day,
+            equipment_id=payload.equipment_id,
+            clear_equipment=payload.clear_equipment,
             cascade=payload.cascade,
+            resolve_roster=payload.resolve_roster,
+            only_fill_empty=payload.only_fill_empty,
+            required_headcount=payload.required_headcount,
+            auto_equipment=payload.auto_equipment,
         ),
     )
 
 
 @router.post("/gantt/tasks/{op_id}/ack-busy")
 async def ack_busy(
-    op_id: str, payload: BusyAckBody, request: Request, _user=Depends(get_current_user)
-):
+    op_id: str, payload: BusyAckBody, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     """确认同人多单并行合理：降级 busy 提示并留痕。"""
     return ok(
         request,
@@ -366,8 +599,7 @@ async def ack_busy(
 
 @router.post("/gantt/tasks/{op_id}/resolve-variance")
 async def resolve_variance(
-    op_id: str, payload: ResolveVarianceBody, request: Request, _user=Depends(get_current_user)
-):
+    op_id: str, payload: ResolveVarianceBody, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     """计划/实绩偏差处置：保持计划 / 跟实现 / 顺延后置。"""
     return ok(
         request,
@@ -382,8 +614,7 @@ async def resolve_variance(
 
 @router.post("/gantt/preview/move/{op_id}")
 async def preview_move_task(
-    op_id: str, payload: MoveTaskBody, request: Request, _user=Depends(get_current_user)
-):
+    op_id: str, payload: MoveTaskBody, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(
         request,
         store.preview_move_task(
@@ -395,37 +626,41 @@ async def preview_move_task(
             duration_days=payload.duration_days,
             plan_segments=payload.plan_segments,
             hours_per_day=payload.hours_per_day,
+            equipment_id=payload.equipment_id,
+            clear_equipment=payload.clear_equipment,
             cascade=payload.cascade,
+            resolve_roster=payload.resolve_roster,
+            only_fill_empty=payload.only_fill_empty,
+            required_headcount=payload.required_headcount,
+            auto_equipment=payload.auto_equipment,
         ),
     )
 
 
 @router.post("/gantt/schedule")
 async def schedule_order(
-    payload: ScheduleOrderBody, request: Request, _user=Depends(get_current_user)
-):
+    payload: ScheduleOrderBody, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.schedule_order_ops(payload.model_dump(exclude_none=True)))
 
 
 @router.post("/gantt/preview/schedule")
 async def preview_schedule_order(
-    payload: ScheduleOrderBody, request: Request, _user=Depends(get_current_user)
-):
+    payload: ScheduleOrderBody, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.preview_schedule_order(payload.model_dump(exclude_none=True)))
 
 
 @router.post("/gantt/sandbox/enter")
-async def sandbox_enter(request: Request, _user=Depends(get_current_user)):
+async def sandbox_enter(request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.sandbox_enter())
 
 
 @router.post("/gantt/sandbox/discard")
-async def sandbox_discard(request: Request, _user=Depends(get_current_user)):
+async def sandbox_discard(request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.sandbox_discard())
 
 
 @router.post("/gantt/sandbox/publish")
-async def sandbox_publish(request: Request, _user=Depends(get_current_user)):
+async def sandbox_publish(request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.sandbox_publish())
 
 
@@ -434,8 +669,7 @@ async def delete_gantt_task(
     op_id: str,
     request: Request,
     force: bool = Query(False),
-    _user=Depends(get_current_user),
-):
+    _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.delete_gantt_task(op_id, force=force))
 
 
@@ -455,33 +689,31 @@ async def report(
     request: Request,
     person_id: str | None = Query(None),
     work_date: str | None = Query(None),
-    _user=Depends(get_current_user),
-):
+    _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.report_overview(person_id=person_id, work_date=work_date))
 
 
 @router.post("/report/daily-log")
-async def submit_daily_log(payload: DailyLogBody, request: Request, _user=Depends(get_current_user)):
+async def submit_daily_log(payload: DailyLogBody, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.submit_daily_log(payload.model_dump()))
 
 
 @router.delete("/report/daily-log/{log_id}")
-async def delete_daily_log(log_id: str, request: Request, _user=Depends(get_current_user)):
+async def delete_daily_log(log_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.delete_daily_log(log_id))
 
 
 @router.post("/report/{op_id}/start")
-async def start_op(op_id: str, request: Request, _user=Depends(get_current_user)):
+async def start_op(op_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.start_op(op_id))
 
 
 @router.post("/report/{op_id}/finish")
-async def finish_op(op_id: str, request: Request, _user=Depends(get_current_user)):
+async def finish_op(op_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.finish_op(op_id))
 
 
 @router.post("/report/{op_id}/pause")
 async def pause_op(
-    op_id: str, payload: PauseBody, request: Request, _user=Depends(get_current_user)
-):
+    op_id: str, payload: PauseBody, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.pause_op(op_id, payload.reason))

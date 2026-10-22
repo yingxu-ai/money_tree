@@ -25,8 +25,13 @@ function Bootstrap() {
 }
 
 function HomeRedirect() {
-  const enabled = useAuthStore((s) => s.user?.enabled_modules);
-  return <Navigate to={getDefaultHomePathForUser(enabled)} replace />;
+  const user = useAuthStore((s) => s.user);
+  return (
+    <Navigate
+      to={getDefaultHomePathForUser(user?.enabled_modules, user?.is_platform_admin)}
+      replace
+    />
+  );
 }
 
 function resolveBasename(raw: string | undefined): string | undefined {

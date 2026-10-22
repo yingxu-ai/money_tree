@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工诊 · 设备健康分析｜6 页样张</title>
+<style>
+:root{
+  --ink:#0b1220;
+  --text:#243447;
+  --muted:#64748b;
+  --line:#dbe3ee;
+  --blue:#0369a1;
+  --blue2:#075985;
+  --cyan:#0ea5e9;
+  --soft:#eef6fc;
+  --warn:#b45309;
+  --red:#b91c1c;
+  --page:#fff;
+  --bg:#e8eef5;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:13.5px;line-height:1.55;-webkit-font-smoothing:antialiased;
+}
+img{display:block;max-width:100%}
+p{margin:0}
+.page{
+  width:210mm;height:297mm;margin:0 auto 24px;background:var(--page);
+  position:relative;overflow:hidden;padding:14mm 15mm 11mm;
+  box-shadow:0 14px 40px rgba(15,23,42,.14);
+  display:flex;flex-direction:column;
+}
+.page:last-child{margin-bottom:0}
+.toolbar{
+  position:fixed;right:18px;top:16px;z-index:99;display:flex;align-items:center;gap:10px;
+  background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:999px;
+  padding:7px 8px 7px 14px;box-shadow:0 8px 30px rgba(15,23,42,.12);font-size:12px;color:var(--muted);
+}
+.toolbar b{color:var(--ink)}
+.toolbar button{
+  border:0;background:var(--blue);color:#fff;font:inherit;font-weight:700;
+  border-radius:999px;padding:7px 14px;cursor:pointer;
+}
+
+/* page header / footer */
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:3mm;border-bottom:1px solid var(--line);font-size:9px;letter-spacing:.08em;color:var(--muted)}
+.ph-brand{display:flex;align-items:center;gap:2mm;font-weight:700;color:var(--ink);letter-spacing:.04em}
+.ph-mark{width:5mm;height:5mm;border-radius:1mm;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:8px;font-weight:800;letter-spacing:0}
+.ph-page{font-variant-numeric:tabular-nums}
+.pf{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding-top:2.5mm;font-size:8.5px;color:#94a3b8;letter-spacing:.03em}
+.content{flex:1;display:flex;flex-direction:column;min-height:0}
+
+/* type */
+.kicker{font-size:8.5px;font-weight:800;letter-spacing:.16em;color:var(--blue);margin-bottom:2.5mm}
+h1,h2,h3{margin:0;color:var(--ink);line-height:1.2;letter-spacing:-.01em}
+h2{font-size:25px;margin-bottom:3mm}
+.page-title p{color:var(--muted);font-size:11.5px;max-width:155mm;line-height:1.65}
+.page-title{margin:5mm 0 5mm}
+
+/* cover */
+.cover{padding:0;background:#0b1220;color:#fff;display:block}
+.cover::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(520px 420px at 78% 22%,rgba(14,165,233,.16),transparent 65%),
+    linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:auto,34px 34px,34px 34px;
+}
+.cover-grid{position:relative;z-index:1;display:flex;flex-direction:column;height:100%}
+.cover-left{padding:15mm 15mm 0;display:flex;flex-direction:column;flex:0 0 auto}
+.cover-brand{display:flex;align-items:center;gap:3mm}
+.cover-brand .mark{width:8mm;height:8mm;border-radius:1.5mm;background:var(--cyan);color:#04202f;display:grid;place-items:center;font-weight:900;font-size:12px}
+.cover-brand b{display:block;font-size:13px;letter-spacing:.04em}
+.cover-brand span{display:block;font-size:9px;color:#94a3b8;letter-spacing:.1em;margin-top:.5mm}
+.cover-kicker{font-size:9px;font-weight:800;letter-spacing:.2em;color:#7dd3fc;margin:12mm 0 4mm}
+.cover h1{font-size:42px;line-height:1.12;color:#fff;margin:0 0 4mm;max-width:150mm}
+.cover-sub{font-size:14px;line-height:1.65;color:#cbd5e1;max-width:125mm}
+.cover-stats{display:flex;gap:7mm;margin-top:5mm}
+.cover-stats b{display:block;font-size:19px;line-height:1.1;color:#7dd3fc}
+.cover-stats span{display:block;font-size:8.5px;color:#94a3b8;margin-top:1mm;letter-spacing:.04em}
+.cover-foot{border-top:1px solid rgba(255,255,255,.16);padding-top:3mm;margin-top:7mm;display:flex;justify-content:space-between;gap:10px;font-size:8.5px;color:#94a3b8;letter-spacing:.04em}
+.cover-right{position:relative;flex:1;padding:6mm 15mm 12mm;display:flex;align-items:center}
+.cover-right::before{content:"";position:absolute;inset:16mm 8mm 4mm;background:rgba(14,165,233,.14);filter:blur(35px);border-radius:50%}
+.cover-shot{position:relative;width:100%;background:#fff;padding:2mm;border-radius:3mm;box-shadow:0 18px 50px rgba(2,6,23,.5)}
+.cover-shot img{width:100%;height:105mm;object-fit:cover;object-position:center;border-radius:1.5mm}
+.cover-shot figcaption{font-size:8px;color:#64748b;padding:2mm 1mm 0;letter-spacing:.03em}
+.cover-note{display:none}
+
+/* page 2 */
+.pain-layout{display:grid;grid-template-columns:1.06fr .94fr;gap:8mm;align-items:start}
+.q-grid{display:grid;grid-template-columns:1fr 1fr;gap:2.5mm}
+.q-card{background:#f8fafc;border:1px solid var(--line);border-radius:2.5mm;padding:4mm 4mm 3.5mm;min-height:33mm}
+.q-card span{display:block;font-size:8px;font-weight:800;color:var(--blue);letter-spacing:.08em;margin-bottom:1.5mm}
+.q-card p{font-size:11.5px;font-weight:600;color:var(--ink);line-height:1.5}
+.ladder{display:grid;gap:2mm}
+.rung{display:grid;grid-template-columns:7mm 1fr;gap:2.5mm;align-items:start;padding:3.4mm 3.2mm;border:1px solid var(--line);border-radius:2mm;background:#fff}
+.rung span{font-size:8px;font-weight:800;color:#94a3b8;padding-top:.4mm}
+.rung b{display:block;font-size:11.5px;color:var(--ink)}
+.rung p{font-size:9.5px;color:var(--muted);margin-top:.8mm;line-height:1.45}
+.rung.active{background:var(--blue);border-color:var(--blue)}
+.rung.active span,.rung.active b,.rung.active p{color:#fff}
+.rung.target{border:1.4px solid var(--blue);background:var(--soft)}
+.banner{margin-top:4mm;background:var(--ink);color:#fff;border-radius:2.5mm;padding:4.5mm 5mm;display:flex;gap:4mm;align-items:flex-start}
+.banner .q{font-size:28px;line-height:1;color:var(--cyan);font-family:Georgia,serif}
+.banner p{font-size:12px;line-height:1.6;color:#e2e8f0}
+.banner b{color:#7dd3fc}
+.delta{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-top:4mm}
+.delta div{background:var(--soft);border:1px solid #cfe6f5;border-radius:1.5mm;padding:2.5mm 3mm}
+.delta b{display:block;font-size:9px;color:var(--blue2);letter-spacing:.04em}
+.delta span{display:block;font-size:8.5px;color:var(--muted);margin-top:1mm;line-height:1.45}
+.teaser{display:flex;align-items:center;justify-content:space-between;gap:5mm;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:4mm;padding:3mm 0}
+.teaser span{font-size:8px;font-weight:800;letter-spacing:.12em;color:var(--blue)}
+.teaser b{display:block;font-size:10px;color:var(--ink);margin-top:1mm;line-height:1.4}
+.teaser .arrow{font-size:16px;font-weight:700;color:var(--blue);white-space:nowrap}
+.proof{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-top:3mm}
+.proof div{border-left:2mm solid var(--blue);padding:1mm 0 1mm 3mm}
+.proof b{display:block;font-size:16px;color:var(--blue2);line-height:1.1}
+.proof span{display:block;font-size:8px;color:var(--muted);margin-top:1mm}
+.strip-shot{margin:3mm 0 0}
+.strip-shot img{width:100%;height:30mm;object-fit:cover;object-position:top;border:1px solid var(--line);border-radius:1.5mm}
+.strip-shot figcaption{font-size:7.5px;color:#94a3b8;margin-top:1.2mm;display:flex;justify-content:space-between;gap:10px}
+
+/* page 3 */
+.roles{display:grid;gap:3mm}
+.role{border:1px solid var(--line);border-radius:2.5mm;padding:3.5mm;display:grid;grid-template-columns:1fr 1.05fr;grid-template-rows:auto 1fr auto;column-gap:4mm;background:#fff}
+.role-head{grid-column:1;grid-row:1}
+.role-head span{font-size:8px;font-weight:800;color:var(--blue);letter-spacing:.1em}
+.role h3{font-size:15px;margin:1.2mm 0 .8mm}
+.role .sub{font-size:9.5px;color:var(--muted);margin-bottom:2.5mm}
+.role ul{grid-column:1;grid-row:2;list-style:none;margin:0;padding:0}
+.role li{position:relative;padding-left:3.5mm;font-size:9.5px;color:var(--text);line-height:1.55;margin:1.4mm 0}
+.role li::before{content:"";position:absolute;left:0;top:1.5mm;width:1.5mm;height:1.5mm;border-radius:50%;background:var(--blue)}
+.role figure{grid-column:2;grid-row:1 / span 3;margin:0;display:flex;flex-direction:column;min-height:0}
+.role img{width:100%;height:100%;min-height:47mm;object-fit:contain;object-position:top;background:#fff;border:1px solid var(--line);border-radius:1.5mm}
+.role figcaption{font-size:7.5px;color:#94a3b8;margin-top:1.5mm;letter-spacing:.02em}
+.role-result{grid-column:1;grid-row:3;margin-top:2.5mm;padding-top:2mm;border-top:1px solid var(--line);font-size:9px;font-weight:700;color:var(--blue2);line-height:1.45}
+.takeaway{margin-top:4mm;background:var(--soft);border-left:2.5mm solid var(--blue);padding:3mm 4mm;font-size:10.5px;color:var(--ink);line-height:1.55}
+.takeaway b{color:var(--blue2)}
+.chain{display:flex;align-items:center;flex-wrap:wrap;gap:2mm;margin-top:4mm;font-size:9px;color:var(--muted)}
+.chain span{background:#fff;border:1px solid var(--line);border-radius:999px;padding:1.5mm 3mm;color:var(--ink);font-weight:600}
+.chain i{font-style:normal;color:#94a3b8}
+
+/* page 4 */
+.arch{display:flex;align-items:stretch;gap:1.5mm;margin:1mm 0 4mm}
+.arch-box{flex:1;border:1px solid var(--line);border-top:2.5mm solid var(--blue);border-radius:1.5mm;padding:2.5mm 2.5mm 2mm;background:#fff}
+.arch-box b{display:block;font-size:10px;color:var(--ink);line-height:1.3}
+.arch-box span{display:block;font-size:8px;color:var(--muted);margin-top:1mm;line-height:1.4}
+.arch-box em{display:block;font-style:normal;font-size:8.5px;font-weight:700;color:var(--blue);margin-top:1.5mm}
+.arch-arrow{display:flex;align-items:center;color:#94a3b8;font-size:11px;padding:0 .2mm}
+.caps{display:grid;grid-template-columns:repeat(4,1fr);gap:2.5mm;margin-bottom:4mm}
+.cap{border:1px solid var(--line);border-radius:2mm;padding:3mm;background:#f8fafc}
+.cap b{display:block;font-size:20px;line-height:1.1;color:var(--blue2);letter-spacing:-.02em}
+.cap span{display:block;font-size:8px;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-top:1mm}
+.cap p{font-size:8.8px;color:var(--muted);line-height:1.5;margin-top:1.5mm}
+.wide{margin:2mm 0 0}
+.wide img{width:100%;height:78mm;object-fit:contain;object-position:center;background:#fff;border:1px solid var(--line);border-radius:1.5mm}
+.wide figcaption{font-size:7.5px;color:#94a3b8;margin-top:1.5mm;display:flex;justify-content:space-between;gap:10px}
+.shot-row{display:grid;grid-template-columns:1.45fr 1fr;gap:3mm;margin-top:2mm}
+.shot-row figure{margin:0}
+.shot-row img{width:100%;height:62mm;object-fit:cover;object-position:top;border:1px solid var(--line);border-radius:1.5mm}
+.shot-row figcaption{font-size:7.5px;color:#94a3b8;margin-top:1.5mm;line-height:1.4}
+.read-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2.5mm;margin-top:3mm}
+.read{border:1px solid var(--line);border-left:2mm solid var(--blue);border-radius:1.5mm;padding:2.5mm 3mm;background:#fff}
+.read b{display:block;font-size:9px;color:var(--ink);line-height:1.4}
+.read span{display:block;font-size:8.2px;color:var(--muted);margin-top:.8mm;line-height:1.45}
+.compare-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-top:4mm}
+.compare-strip div{border-top:2px solid #cbd5e1;padding-top:2mm}
+.compare-strip div.ours{border-color:var(--blue)}
+.compare-strip span{display:block;font-size:7.5px;font-weight:800;letter-spacing:.08em;color:#94a3b8}
+.compare-strip div.ours span{color:var(--blue)}
+.compare-strip b{display:block;font-size:9px;color:var(--ink);margin-top:1mm;line-height:1.45}
+.deliverables{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-top:3mm}
+.deliverables div{background:var(--soft);border:1px solid #cfe6f5;border-radius:1.5mm;padding:2.5mm 3mm}
+.deliverables b{display:block;font-size:9px;color:var(--blue2)}
+.deliverables span{display:block;font-size:8px;color:var(--muted);margin-top:.8mm;line-height:1.4}
+
+/* page 5 */
+.case-layout{display:grid;grid-template-columns:1.02fr .98fr;gap:6mm;align-items:start}
+.timeline{display:grid;gap:0}
+.t-step{display:grid;grid-template-columns:16mm 1fr;gap:2mm;padding:3mm 0;border-bottom:1px solid var(--line)}
+.t-step:first-child{padding-top:0}
+.t-step time{font-size:8.5px;font-weight:800;color:var(--blue);line-height:1.4}
+.t-step b{display:block;font-size:11px;color:var(--ink);line-height:1.4}
+.t-step p{font-size:9.2px;color:var(--muted);line-height:1.5;margin-top:1mm}
+.case-shots{display:grid;gap:2.5mm}
+.case-shots figure{margin:0}
+.case-shots img{width:100%;height:47mm;object-fit:contain;object-position:top;background:#fff;border:1px solid var(--line);border-radius:1.5mm}
+.case-shots figcaption{font-size:7.5px;color:#94a3b8;margin-top:1.2mm}
+.if-grid{display:grid;grid-template-columns:1fr 1fr;gap:2mm;margin-top:3mm}
+.if-box{border:1px solid var(--line);border-radius:1.5mm;padding:2.5mm;font-size:8.5px;color:var(--muted);line-height:1.5;background:#fff}
+.if-box b{display:block;font-size:9px;margin-bottom:1mm;color:var(--ink)}
+.if-box.bad{border-left:2mm solid var(--red)}
+.if-box.good{border-left:2mm solid #15803d}
+.result-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:2.5mm;margin-top:4mm}
+.metric{background:var(--ink);color:#fff;border-radius:2mm;padding:3.5mm}
+.metric b{display:block;font-size:22px;line-height:1.1;color:#7dd3fc;letter-spacing:-.02em}
+.metric span{display:block;font-size:8.5px;color:#cbd5e1;margin-top:1mm;line-height:1.4}
+.note{margin-top:2.5mm;font-size:7.5px;color:#94a3b8;display:flex;justify-content:space-between;gap:10px}
+.case-lesson{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-top:4mm}
+.case-lesson div{border-top:2px solid var(--blue);padding-top:2mm;font-size:8.5px;color:var(--muted);line-height:1.5}
+.case-lesson b{display:block;font-size:9.5px;color:var(--ink);margin-bottom:1mm}
+.judge{display:grid;grid-template-columns:repeat(4,1fr);gap:2mm;margin-top:3mm}
+.judge div{border-top:2px solid var(--blue);padding-top:2mm}
+.judge span{display:block;font-size:7.5px;font-weight:800;letter-spacing:.08em;color:var(--blue)}
+.judge b{display:block;font-size:8.8px;color:var(--ink);margin-top:1mm;line-height:1.45}
+
+/* page 6 */
+.industries{display:grid;grid-template-columns:repeat(5,1fr);gap:2mm;margin-bottom:4mm}
+.ind{border:1px solid var(--line);border-radius:1.5mm;padding:2.5mm 2.5mm;display:flex;flex-direction:column;align-items:flex-start;gap:1mm;font-size:8.8px;font-weight:600;color:var(--ink);background:#fff;min-height:15mm}
+.ind i{width:2mm;height:2mm;border-radius:.5mm;background:var(--blue)}
+.ind b{font-size:8.8px;line-height:1.3}
+.ind span{font-size:7.2px;color:#94a3b8;line-height:1.35;font-weight:400}
+.delivery{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-bottom:4mm}
+.delivery div{border:1px solid var(--line);border-radius:1.5mm;padding:2.5mm 3mm;background:var(--soft)}
+.delivery b{display:block;font-size:8px;color:var(--blue2);letter-spacing:.06em}
+.delivery span{display:block;font-size:8.5px;color:var(--muted);margin-top:.8mm}
+.fit2{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-bottom:4mm}
+.fit-col{border:1px solid var(--line);border-radius:2mm;padding:3mm 3.5mm;background:#fff}
+.fit-col h3{font-size:11px;margin-bottom:1.5mm}
+.fit-col.yes{border-top:2mm solid var(--blue)}
+.fit-col.no{border-top:2mm solid #94a3b8}
+.fit-col ul{list-style:none;margin:0;padding:0}
+.fit-col li{position:relative;padding-left:3mm;font-size:8.8px;color:var(--muted);line-height:1.5;margin:1mm 0}
+.fit-col.yes li::before{content:"✓";position:absolute;left:0;color:var(--blue);font-weight:800}
+.fit-col.no li::before{content:"—";position:absolute;left:0;color:#94a3b8}
+.path{display:grid;grid-template-columns:repeat(4,1fr);gap:2mm;margin-bottom:4mm}
+.path-step{border-left:1.5mm solid var(--blue);padding-left:2.5mm}
+.path-step span{display:block;font-size:8px;font-weight:800;color:var(--blue);letter-spacing:.08em}
+.path-step b{display:block;font-size:9.5px;color:var(--ink);margin-top:.8mm;line-height:1.4}
+.path-step p{font-size:8.2px;color:var(--muted);line-height:1.45;margin-top:.8mm}
+.pilot{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-bottom:3mm}
+.pilot div{border:1px solid var(--line);border-top:2mm solid var(--blue);border-radius:1.5mm;padding:2.5mm 3mm;background:#fff}
+.pilot span{display:block;font-size:7.5px;font-weight:800;letter-spacing:.08em;color:var(--blue)}
+.pilot b{display:block;font-size:8.8px;color:var(--ink);margin-top:1mm;line-height:1.45}
+.faq3{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-bottom:4mm}
+.faq3 div{border-left:1.5mm solid #cbd5e1;padding-left:2.5mm}
+.faq3 b{display:block;font-size:8.5px;color:var(--ink);line-height:1.4}
+.faq3 span{display:block;font-size:7.8px;color:var(--muted);margin-top:.8mm;line-height:1.45}
+.handover{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-bottom:4mm}
+.handover div{background:var(--ink);color:#fff;border-radius:1.5mm;padding:2.5mm 3mm}
+.handover span{display:block;font-size:7.5px;font-weight:800;letter-spacing:.08em;color:#7dd3fc}
+.handover b{display:block;font-size:8.8px;margin-top:1mm;line-height:1.4}
+.closing{margin-top:4mm;padding-top:4mm;border-top:1px solid var(--line)}
+.closing b{display:block;font-size:15px;color:var(--ink);letter-spacing:-.01em}
+.closing span{display:block;font-size:9px;color:var(--muted);margin-top:1.5mm}
+.contact{background:var(--ink);color:#fff;border-radius:2.5mm;padding:4.5mm 5mm;display:grid;grid-template-columns:1.35fr .65fr;gap:4mm;align-items:center;margin-top:auto}
+.contact .k{font-size:8px;font-weight:800;letter-spacing:.16em;color:#7dd3fc;margin-bottom:1.5mm}
+.contact h3{color:#fff;font-size:16px;margin-bottom:1.5mm}
+.contact p{font-size:9px;color:#cbd5e1;line-height:1.55}
+.contact .lines{display:grid;gap:.8mm;margin-top:2mm;font-size:8.8px;color:#e2e8f0}
+.contact .lines b{display:inline-block;min-width:8mm;color:#7dd3fc;font-weight:600}
+.qr{justify-self:end;width:25mm;height:25mm;border:1px dashed rgba(255,255,255,.45);border-radius:1.5mm;display:grid;place-items:center;text-align:center;font-size:7.5px;color:#94a3b8;background:rgba(255,255,255,.04);padding:1mm}
+.footnote{font-size:7.5px;color:#94a3b8;margin-top:2.5mm;line-height:1.45}
+
+/* print */
+@media print{
+  @page{size:A4;margin:0}
+  body{background:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .toolbar{display:none!important}
+  .page{margin:0;box-shadow:none;break-after:page;page-break-after:always;width:210mm;height:297mm}
+  .page:last-child{break-after:auto;page-break-after:auto}
+  .cover{background:#0b1220!important}
+}
+
+/* screen small */
+@media(max-width:760px){
+  body{padding:0;background:#eef2f7}
+  .toolbar{position:static;margin:12px;border-radius:8px;justify-content:space-between}
+  .page{width:100%;height:auto;min-height:0;margin:0 0 12px;padding:20px 18px;border-radius:0;box-shadow:none}
+  .cover{min-height:auto}
+  .cover-grid{grid-template-columns:1fr;height:auto}
+  .cover-left{padding:26px 20px 20px;gap:22px}
+  .cover h1{font-size:34px;max-width:none}
+  .cover-right{padding:0 20px 26px}
+  .cover-shot img{height:200px}
+  .cover-note{position:static;padding:0 20px 18px}
+  .pain-layout,.case-layout{grid-template-columns:1fr}
+  .roles,.caps,.result-strip{grid-template-columns:1fr}
+  .role{min-height:0}
+  .role img{height:190px}
+  .arch{display:grid;grid-template-columns:1fr 1fr}
+  .arch-arrow{display:none}
+  .wide img{height:180px}
+  .industries{grid-template-columns:1fr 1fr}
+  .fit2,.path{grid-template-columns:1fr}
+  .contact{grid-template-columns:1fr}
+  .qr{justify-self:start}
+  h2{font-size:22px}
+  .cover-stats{flex-wrap:wrap;gap:18px}
+}
+</style>
+</head>
+<body>
+<div class="toolbar no-print">
+  <span><b>工诊</b> · 6 页样张</span>
+  <button type="button" onclick="window.print()">打印 / PDF</button>
+</div>
+
+<main>
+
+<!-- ================= PAGE 1 · COVER ================= -->
+<section class="page cover">
+  <div class="cover-grid">
+    <div class="cover-left">
+      <div class="cover-brand">
+        <div class="mark">元</div>
+        <div><b>元启·工小智</b><span>工诊 / 设备健康分析</span></div>
+      </div>
+
+      <div>
+        <div class="cover-kicker">设备预测性维护 · 智能运维</div>
+        <h1>设备健康，<br>不该等坏了才知道</h1>
+        <p class="cover-sub">从一条振动告警，到一份可执行的检修结论。把“超限了”变成“哪类故障、还能跑多久、先做什么”。</p>
+        <div class="cover-stats">
+          <div><b>9</b><span>测点 / 台</span></div>
+          <div><b>5s</b><span>采样周期</span></div>
+          <div><b>3–9天</b><span>RUL 预测窗口</span></div>
+        </div>
+      </div>
+
+      <div class="cover-foot">
+        <span>设备健康分析（工诊）· 产品册 2026-10</span>
+        <span>EQ-C02 · 2#压缩机</span>
+        <span>01 / 06</span>
+      </div>
+    </div>
+
+    <div class="cover-right">
+      <figure class="cover-shot">
+        <img src="assets/cover.jpg" alt="2#压缩机整站健康示意，主机区域标红，显示风险高、贡献40.4%" />
+        <figcaption>系统界面 · 2#压缩机整站健康示意</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PAGE 2 · PAIN + MATURITY ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="ph-brand"><span class="ph-mark">元</span> 元启·工小智 · 工诊</div>
+    <div class="ph-page">02 / 06</div>
+  </header>
+
+  <div class="content">
+    <div class="page-title">
+      <div class="kicker">01 / 为什么</div>
+      <h2>为什么设备健康管理，总是慢半拍？</h2>
+      <p>工厂不缺测点，也不缺告警；缺的是把“超限了”变成“哪类故障、还能跑多久、先做什么”的那一步。</p>
+    </div>
+
+    <div class="pain-layout">
+      <div class="q-grid">
+        <div class="q-card"><span>01</span><p>设备坏了才知道，非计划停机打乱交期？</p></div>
+        <div class="q-card"><span>02</span><p>告警天天刷屏，真正危险被淹没？</p></div>
+        <div class="q-card"><span>03</span><p>知道振动超限，却说不清是哪类故障？</p></div>
+        <div class="q-card"><span>04</span><p>有测点、有数据，却形不成结论和动作？</p></div>
+        <div class="q-card"><span>05</span><p>备件靠猜、检修靠救火，窗口排不出来？</p></div>
+        <div class="q-card"><span>06</span><p>多车间多设备，主管不知道先看哪台？</p></div>
+      </div>
+
+      <div class="ladder">
+        <div class="rung">
+          <span>01</span>
+          <div><b>响应式维修</b><p>坏了再修，非计划停机，备件被动采购。</p></div>
+        </div>
+        <div class="rung">
+          <span>02</span>
+          <div><b>预防性维护</b><p>按固定周期保养，容易过修，也容易欠修。</p></div>
+        </div>
+        <div class="rung">
+          <span>03</span>
+          <div><b>状态监测</b><p>看振动、温度，知道“超限了”，但不知道原因。</p></div>
+        </div>
+        <div class="rung active">
+          <span>04</span>
+          <div><b>预测性维护</b><p>证据 + 模型，判断故障类型、剩余寿命和检修窗口。</p></div>
+        </div>
+        <div class="rung target">
+          <span>05</span>
+          <div><b>可靠性维修</b><p>以风险为中心，维修策略、备件和产能一起排。</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="delta">
+      <div><b>多一套证据</b><span>频谱、特征频段、多测点一致性，不是一条阈值。</span></div>
+      <div><b>多一个判断</b><span>故障类型、原因概率、RUL 与检修窗口。</span></div>
+      <div><b>多一个动作</b><span>今日动作、备件、降载与计划检修。</span></div>
+    </div>
+
+    <div class="proof">
+      <div><b>6.2 mm/s</b><span>主机振动，较 7 日均值 +32%</span></div>
+      <div><b>5.07 / 2.5</b><span>2× 不对中幅值 / 限值（mm/s）</span></div>
+      <div><b>76%</b><span>轴承磨损原因概率</span></div>
+    </div>
+
+    <div class="banner">
+      <div class="q">“</div>
+      <p><b>工诊不是再上一个大屏</b>，而是把“超限了”变成“哪类故障、还能跑多久、先做什么”。告警是起点，结论和动作才是交付。</p>
+    </div>
+
+    <div class="teaser">
+      <div><span>一个现场片段</span><b>2#压缩机：6.2 mm/s 振动，RUL 3–9 天，计划检修 8 小时</b></div>
+      <span class="arrow">P05 →</span>
+    </div>
+  </div>
+
+  <footer class="pf"><span>设备健康分析（工诊）· 产品册 2026-10</span><span>02 / 06</span></footer>
+</section>
+
+<!-- ================= PAGE 3 · VALUE BY ROLE ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="ph-brand"><span class="ph-mark">元</span> 元启·工小智 · 工诊</div>
+    <div class="ph-page">03 / 06</div>
+  </header>
+
+  <div class="content">
+    <div class="page-title">
+      <div class="kicker">02 / 价值</div>
+      <h2>同一套数据，三种人各取所需</h2>
+      <p>一线要“看得懂、做得到”，主管要“先看哪台、什么时候修”，高层要“停机损失能不能提前算”。</p>
+    </div>
+
+    <div class="roles">
+      <article class="role">
+        <div class="role-head"><span>01 / 一线运维</span><h3>看得懂，做得到</h3><p class="sub">从“看告警”到“知道先做什么”</p></div>
+        <ul>
+          <li>2× 不对中 5.07 mm/s，轴承外圈 3.0 mm/s，一眼看到越限特征</li>
+          <li>原因候选：轴承磨损 76%、润滑不足 18%，带置信度</li>
+          <li>今日动作、备件 SP-882、若仍发生的预案，直接可执行</li>
+        </ul>
+        <figure>
+          <img src="assets/evidence.jpg" alt="证据页：频谱、特征频段表、原因候选" />
+          <figcaption>系统界面 · 证据链与频谱</figcaption>
+        </figure>
+        <div class="role-result">不用再靠“老师傅听声音”判断。</div>
+      </article>
+
+      <article class="role">
+        <div class="role-head"><span>02 / 设备主管</span><h3>先看哪台，什么时候修</h3><p class="sub">从“救火”到“排窗口”</p></div>
+        <ul>
+          <li>3 台设备：1 台异常、1 台关注、1 台正常，先看 2#</li>
+          <li>健康度 28 vs 92，未来风险 2 台、待处理事件 4 条</li>
+          <li>建议检修窗口 2026-08-30 前，和产能/备件一起排</li>
+        </ul>
+        <figure>
+          <img src="assets/diagnosis.jpg" alt="分析诊断页：设备总数、异常、关注、未来风险、健康列表" />
+          <figcaption>系统界面 · 机队与风险排序</figcaption>
+        </figure>
+        <div class="role-result">不是“都重要”，而是“先处理哪台”。</div>
+      </article>
+
+      <article class="role">
+        <div class="role-head"><span>03 / 高层决策</span><h3>停机损失，能不能提前算</h3><p class="sub">从“停机才知道”到“计划内检修”</p></div>
+        <ul>
+          <li>未来 7 天严重故障概率 72%，RUL 3–9 天</li>
+          <li>计划检修约 8 小时；若不管，突发停机约 2 天 1 小时</li>
+          <li>少停约 1 天 17 小时，备件与窗口可提前安排</li>
+        </ul>
+        <figure>
+          <img src="assets/action.jpg" alt="处置页：未来7天故障概率72%、建议动作、备件与停机对比" />
+          <figcaption>系统界面 · 处置结论与损失对比</figcaption>
+        </figure>
+        <div class="role-result">把“抢修”变成“计划”，把损失算在前面。</div>
+      </article>
+    </div>
+
+    <div class="chain">
+      <span>测点</span><i>→</i><span>特征</span><i>→</i><span>原因</span><i>→</i><span>处置</span><i>→</i><span>停机损失</span>
+      <i>·</i><span>同一台设备、同一条证据</span>
+    </div>
+
+    <div class="takeaway"><b>不是三套报表，是同一条证据链：</b>测点 → 特征 → 原因 → 处置 → 停机损失。一线看到证据，主管看到排序，高层看到钱。</div>
+  </div>
+
+  <footer class="pf"><span>设备健康分析（工诊）· 产品册 2026-10</span><span>03 / 06</span></footer>
+</section>
+
+<!-- ================= PAGE 4 · HOW IT WORKS ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="ph-brand"><span class="ph-mark">元</span> 元启·工小智 · 工诊</div>
+    <div class="ph-page">04 / 06</div>
+  </header>
+
+  <div class="content">
+    <div class="page-title">
+      <div class="kicker">03 / 怎么做</div>
+      <h2>一条从测点到工单的链路</h2>
+      <p>不是“接个传感器就完了”：采集、诊断、预测、处置、机队，每一段都要能对上同一台设备、同一条证据。</p>
+    </div>
+
+    <div class="arch">
+      <div class="arch-box"><b>设备与测点</b><span>振动、温度、电流、排气温度</span><em>9 个测点 / 台</em></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box"><b>采集与边缘</b><span>温振传感器 / PLC / 5 秒采样</span><em>在线率可看</em></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box"><b>诊断与预测</b><span>机理 + 数理 / 特征频段 / PCA</span><em>1× / 2× / 轴承特征</em></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box"><b>处置与工单</b><span>今日动作 / 备件 / 检修窗口</span><em>建议 + 预案</em></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box"><b>机队与报表</b><span>异常排序 / 健康分布 / 事件</span><em>先看哪台</em></div>
+    </div>
+
+    <div class="caps">
+      <div class="cap"><b>6.2</b><span>mm/s 主机振动</span><p>较近 7 日均值约 +32%；轴承温度 92℃，排气温度 118℃。</p></div>
+      <div class="cap"><b>5.07</b><span>mm/s 2× 不对中</span><p>限值 2.5；轴承外圈 3.0 mm/s（限值 2.2），频谱与瀑布同频段增强。</p></div>
+      <div class="cap"><b>76%</b><span>轴承磨损概率</span><p>润滑不足 18%、紧固松动 6%；HI 28，RUL 3–9 天，7 天故障概率 72%。</p></div>
+      <div class="cap"><b>8h</b><span>计划检修</span><p>72 小时内检查轴承/润滑，备件 SP-882，降载运行；对比突发停机 2 天 1 小时。</p></div>
+    </div>
+
+    <figure class="wide">
+      <img src="assets/evidence-main.jpg" alt="证据页：频谱、特征频段表、原因候选与多源一致性" />
+      <figcaption><span>系统界面 · 频谱 / 特征频段 / 原因候选（2980 rpm）</span><span>2#压缩机 · 动力部</span></figcaption>
+    </figure>
+
+    <div class="read-grid">
+      <div class="read"><b>1× · 49.67 Hz · 1.9 mm/s</b><span>不平衡在限值 2.5 内，先排除。</span></div>
+      <div class="read"><b>2× · 99.34 Hz · 5.07 mm/s</b><span>不对中越限（限值 2.5），主诊断依据。</span></div>
+      <div class="read"><b>3.6× · 178.81 Hz · 3.0 mm/s</b><span>轴承外圈越限（限值 2.2），磨损候选。</span></div>
+    </div>
+
+    <div class="compare-strip">
+      <div><span>纯 SCADA / 告警台</span><b>只告诉你“超限了”，原因和下一步还得靠人。</b></div>
+      <div><span>通用 BI 看板</span><b>事后统计多，难落到当班动作和检修窗口。</b></div>
+      <div class="ours"><span>工诊</span><b>证据 → 结论 → 动作 → 停机损失，一条链走完。</b></div>
+    </div>
+
+    <div class="deliverables">
+      <div><b>一份设备健康档案</b><span>设备、测点、基线、历史事件。</span></div>
+      <div><b>一份诊断报告</b><span>频谱、特征、原因候选、RUL。</span></div>
+      <div><b>一份检修建议</b><span>今日动作、备件、窗口与预案。</span></div>
+    </div>
+  </div>
+
+  <footer class="pf"><span>设备健康分析（工诊）· 产品册 2026-10</span><span>04 / 06</span></footer>
+</section>
+
+<!-- ================= PAGE 5 · CASE ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="ph-brand"><span class="ph-mark">元</span> 元启·工小智 · 工诊</div>
+    <div class="ph-page">05 / 06</div>
+  </header>
+
+  <div class="content">
+    <div class="page-title">
+      <div class="kicker">04 / 案例</div>
+      <h2>2#压缩机：一条振动告警，如何变成一次计划检修</h2>
+      <p>2#压缩机 · 动力部 · 一次从采样到处置的完整记录。</p>
+    </div>
+
+    <div class="case-layout">
+      <div class="timeline">
+        <div class="t-step">
+          <time>08-27<br>21:00</time>
+          <div><b>采样：主机振动、温度、电流同时异常</b><p>主机振动 6.2 mm/s、轴承温度 92℃、电机电流 96 A、排气温度 118℃；较近 7 日均值约 +32%。</p></div>
+        </div>
+        <div class="t-step">
+          <time>21:05</time>
+          <div><b>诊断：不是“振动大”，是 2× 不对中 + 轴承特征</b><p>2× 99.34 Hz 幅值 5.07 mm/s（限值 2.5）；轴承外圈 3.0 mm/s（限值 2.2）。原因候选：轴承磨损 76%。</p></div>
+        </div>
+        <div class="t-step">
+          <time>21:10</time>
+          <div><b>处置：先降载，72 小时内检查轴承与润滑</b><p>预留备件 SP-882 轴承；建议检修窗口不晚于 2026-08-30；RUL 3–9 天，7 天严重故障概率 72%。</p></div>
+        </div>
+        <div class="t-step">
+          <time>08-30<br>前</time>
+          <div><b>结果：计划检修 8 小时，避免突发停机</b><p>对比“如果不处理”：可能由计划更换升级为非计划停机，突发停机约 2 天 1 小时；少停约 1 天 17 小时。</p></div>
+        </div>
+      </div>
+
+      <div class="case-shots">
+        <figure>
+          <img src="assets/action.jpg" alt="处置结论：未来7天严重故障概率72%，建议动作与备件" />
+          <figcaption>处置结论 · 今日动作 / 备件 / 预案</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/evidence.jpg" alt="证据页：频谱、特征表、原因候选与多源一致性" />
+          <figcaption>证据链 · 频谱 / 特征 / 原因候选</figcaption>
+        </figure>
+        <div class="if-grid">
+          <div class="if-box bad"><b>如果不处理</b>主机振动与温升同向加重，可能由计划更换升级为非计划停机；突发停机约 2 天 1 小时。</div>
+          <div class="if-box good"><b>如果处理</b>按建议点检/润滑后，计划检修约 8 小时，可少停约 1 天 17 小时。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="result-strip">
+      <div class="metric"><b>72%</b><span>未来 7 天严重故障概率</span></div>
+      <div class="metric"><b>3–9 天</b><span>RUL 预测窗口</span></div>
+      <div class="metric"><b>1天17小时</b><span>相比突发停机少停</span></div>
+    </div>
+    <div class="judge">
+      <div><span>哪类故障</span><b>2× 不对中 + 轴承外圈特征，轴承磨损 76%</b></div>
+      <div><span>还能跑多久</span><b>RUL 3–9 天，7 天严重故障概率 72%</b></div>
+      <div><span>先做什么</span><b>72 小时内检查轴承/润滑，降载运行</b></div>
+      <div><span>什么时候修</span><b>不晚于 2026-08-30，计划检修 8 小时</b></div>
+    </div>
+
+    <div class="case-lesson">
+      <div><b>不是误报</b>2× 不对中 + 轴承外圈特征 + 多测点同向，三条证据互相印证。</div>
+      <div><b>不是拍脑袋</b>RUL 3–9 天、7 天严重故障概率 72%，窗口和备件都有依据。</div>
+      <div><b>不是只给建议</b>备件 SP-882、降载运行、72 小时检查，今天就能做。</div>
+    </div>
+
+    <div class="note"><span>2#压缩机 · 动力部</span><span>工诊 · 设备健康分析</span></div>
+  </div>
+
+  <footer class="pf"><span>设备健康分析（工诊）· 产品册 2026-10</span><span>05 / 06</span></footer>
+</section>
+
+<!-- ================= PAGE 6 · LANDING ================= -->
+<section class="page">
+  <header class="ph">
+    <div class="ph-brand"><span class="ph-mark">元</span> 元启·工小智 · 工诊</div>
+    <div class="ph-page">06 / 06</div>
+  </header>
+
+  <div class="content">
+    <div class="page-title">
+      <div class="kicker">05 / 落地</div>
+      <h2>先选一类关键设备，跑通再扩</h2>
+      <p>不建议一上来全厂接测点；先选一类停机损失最高的设备，用真实故障验证“诊断—处置”能不能闭环。</p>
+    </div>
+
+    <div class="industries">
+      <div class="ind"><i></i><b>空压站 / 动力站</b><span>空压机、泵、冷机</span></div>
+      <div class="ind"><i></i><b>水泥</b><span>球磨机、风机、辊压机</span></div>
+      <div class="ind"><i></i><b>钢铁</b><span>风机、泵、减速箱</span></div>
+      <div class="ind"><i></i><b>化工</b><span>泵、压缩机、风机</span></div>
+      <div class="ind"><i></i><b>食品饮料</b><span>均质机、离心机、粉碎机</span></div>
+      <div class="ind"><i></i><b>汽车</b><span>冲压、焊装、涂装设备</span></div>
+      <div class="ind"><i></i><b>水处理</b><span>水泵、鼓风机、污泥设备</span></div>
+      <div class="ind"><i></i><b>数据中心</b><span>冷机、水泵、空调</span></div>
+      <div class="ind"><i></i><b>OEM 机械</b><span>电机、减速箱、试验台</span></div>
+      <div class="ind"><i></i><b>电力</b><span>风机、泵、磨煤机</span></div>
+    </div>
+
+    <div class="delivery">
+      <div><b>部署</b><span>云端开通 / 本地部署</span></div>
+      <div><b>终端</b><span>设备主管 / 工程师用电脑，现场可用平板</span></div>
+      <div><b>数据</b><span>账号、组织、权限随平台</span></div>
+    </div>
+
+    <div class="fit2">
+      <div class="fit-col yes">
+        <h3>通常会比较适合</h3>
+        <ul>
+          <li>关键设备停机损失高，备件 / 维修被动</li>
+          <li>已有或可接 PLC / 电气 / 环境测点</li>
+          <li>有点检 / 维修流程，能承接处置动作</li>
+        </ul>
+      </div>
+      <div class="fit-col no">
+        <h3>建议先别急</h3>
+        <ul>
+          <li>设备没有任何数据，也不打算接</li>
+          <li>只想看一个大屏，不需要处置闭环</li>
+          <li>期望 AI 直接下维修指令、人不用确认</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="path">
+      <div class="path-step"><span>STEP 1</span><b>选一类关键设备</b><p>停机损失最高、故障重复出现的那一类。</p></div>
+      <div class="path-step"><span>STEP 2</span><b>接 5–10 个关键测点</b><p>振动、温度、电流、压力；先支撑诊断，不求全。</p></div>
+      <div class="path-step"><span>STEP 3</span><b>一周数据 + 已知故障验证</b><p>看证据是否一致、误报多少、处置是否可执行。</p></div>
+      <div class="path-step"><span>STEP 4</span><b>复盘再扩</b><p>看误报、漏报、检修时效，再扩设备类型。</p></div>
+    </div>
+
+    <div class="pilot">
+      <div><span>看误报</span><b>已知正常设备是否被误报？</b></div>
+      <div><span>看漏报</span><b>已知故障是否被漏掉？</b></div>
+      <div><span>看时效</span><b>从告警到动作要多久？</b></div>
+    </div>
+
+    <div class="faq3">
+      <div><b>一定要接很多测点吗？</b><span>先接 5–10 个关键测点，能支撑诊断即可。</span></div>
+      <div><b>和 SCADA 什么关系？</b><span>不替代采集和告警，在告警之上做诊断和处置。</span></div>
+      <div><b>多久能上线、多少钱？</b><span>取决于测点与数据质量；按设备类型和范围沟通。</span></div>
+    </div>
+
+    <div class="handover">
+      <div><span>交付 01</span><b>一份设备健康档案：设备、测点、基线、事件历史。</b></div>
+      <div><span>交付 02</span><b>一份诊断报告：频谱、特征、原因候选、RUL。</b></div>
+      <div><span>交付 03</span><b>一份检修建议：动作、备件、窗口与预案。</b></div>
+    </div>
+
+    <div class="closing">
+      <b>“先让一类设备可信，再谈全厂。”</b>
+      <span>从一个空压站、一类关键设备开始，跑通诊断—处置—复盘，再复制到下一类。</span>
+    </div>
+
+    <div class="contact">
+      <div>
+        <div class="k">下一步</div>
+        <h3>把你们的关键设备清单发来</h3>
+        <p>先做一次 30 分钟线上沟通，选一类设备看数据能不能支撑诊断。不适合会直接说。</p>
+        <div class="lines">
+          <div><b>联系人</b>【姓名】</div>
+          <div><b>电话</b>【手机】</div>
+          <div><b>微信</b>【微信号】</div>
+          <div><b>邮箱</b>【邮箱】</div>
+        </div>
+      </div>
+      <div class="qr">二维码位置<br>替换为销售微信</div>
+    </div>
+
+    <p class="footnote">工诊可单独上线，不依赖智排；与智排 / 智艺 / 智检合买时，设备编码、工艺与质量数据可对齐。具体功能、交付范围与报价以合同为准。</p>
+  </div>
+
+  <footer class="pf"><span>设备健康分析（工诊）· 产品册 2026-10</span><span>06 / 06</span></footer>
+</section>
+
+</main>
+</body>
+</html>
+
+

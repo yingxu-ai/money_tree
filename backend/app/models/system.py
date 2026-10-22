@@ -142,15 +142,23 @@ class SysPermission(SQLModel, table=True):
 
 
 class SysApiPermission(SQLModel, table=True):
-    """接口权限映射：HTTP 方法 + 路径模板 → 权限码。由配置台维护，全局鉴权读取。"""
+    """
+    接口权限（稳定身份）。
+    - stable_key：按后端处理函数生成，路径/名称变更仍是同一条
+    - method/path_pattern：运行时匹配用，同步时可更新
+    - name：展示名，可人工改
+    - menu_id：挂到哪个菜单页（角色树用）
+    """
 
     __tablename__ = "sys_api_permission"
 
     id: int | None = Field(default=None, primary_key=True)
+    stable_key: str = Field(default="", index=True, max_length=255)
     method: str = Field(index=True, max_length=16)  # GET/POST/PUT/DELETE/PATCH 或 *
-    path_pattern: str = Field(index=True, max_length=256)  # 相对 api_prefix，如 /scheduling/gantt
-    permission_code: str = Field(index=True, max_length=128)
+    path_pattern: str = Field(index=True, max_length=256)  # 相对 api_prefix
+    permission_code: str = Field(default="", index=True, max_length=128)  # 可选，兼容前端 AuthButton
     name: str = Field(default="", max_length=128)
+    menu_id: int | None = Field(default=None, index=True)
     enabled: bool = Field(default=True)
     sort: int = Field(default=0)
     tenant_id: int = Field(default=1, index=True)
@@ -172,6 +180,16 @@ class SysRolePermission(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     role_id: int = Field(foreign_key="sys_role.id", index=True)
     permission_id: int = Field(foreign_key="sys_permission.id", index=True)
+
+
+class SysRoleApiPermission(SQLModel, table=True):
+    """角色 ↔ 接口权限规则（按稳定 id 勾选，改路径不丢授权）。"""
+
+    __tablename__ = "sys_role_api_permission"
+
+    id: int | None = Field(default=None, primary_key=True)
+    role_id: int = Field(foreign_key="sys_role.id", index=True)
+    api_permission_id: int = Field(foreign_key="sys_api_permission.id", index=True)
 
 
 class SysLoginLog(SQLModel, table=True):

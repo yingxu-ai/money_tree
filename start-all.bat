@@ -4,7 +4,7 @@ setlocal
 cd /d "%~dp0"
 
 echo [start-all] 将分别打开后端、前端两个窗口
-echo [start-all] 后端: http://127.0.0.1:8000
+echo [start-all] 后端: http://127.0.0.1:8001
 echo [start-all] 前端: http://127.0.0.1:5173
 echo.
 

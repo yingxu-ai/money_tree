@@ -15,15 +15,25 @@ export interface KpiRowProps {
   loading?: boolean;
 }
 
-/** 顶部 KPI 卡片行：数量由数据驱动。 */
+/** 顶部 KPI 卡片行：数量由数据驱动；≥5 个时桌面端等分一行。 */
 export default function KpiRow({ items, loading }: KpiRowProps) {
   if (!items.length) return null;
-  const span = items.length >= 4 ? 6 : items.length === 3 ? 8 : 12;
+  const n = items.length;
+  // 5 个及以上：桌面等分一行；4/3/2 仍用 24 栅格
+  const useFlex = n >= 5;
+  const span = n >= 4 ? 6 : n === 3 ? 8 : 12;
 
   return (
-    <Row gutter={[16, 16]} style={{ marginBottom: 16 }} align="stretch">
+    <Row gutter={[16, 16]} style={{ marginBottom: 16 }} align="stretch" wrap={!useFlex}>
       {items.map((item) => (
-        <Col key={item.title} xs={24} sm={12} md={span} style={{ display: "flex" }}>
+        <Col
+          key={item.title}
+          xs={24}
+          sm={useFlex ? undefined : 12}
+          md={useFlex ? undefined : span}
+          flex={useFlex ? "1 1 0" : undefined}
+          style={{ display: "flex", minWidth: useFlex ? 140 : undefined }}
+        >
           <Card size="small" loading={loading} style={{ width: "100%", minHeight: 108 }}>
             <Statistic
               title={item.title}

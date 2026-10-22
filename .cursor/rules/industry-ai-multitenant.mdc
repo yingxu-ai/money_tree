@@ -1,0 +1,35 @@
+---
+description: industry-ai 多租户 SaaS 架构与改动约束（平台 admin / 租户 / 组织 / SKU）
+alwaysApply: true
+---
+
+# 多租户与产品边界
+
+- **租户（`sys_tenant`）**：客户售卖边界；`enabled_modules` 控制业务模块 SKU（如 `scheduling`）。
+- **组织（`sys_dept`）**：租户内部门树；每条记录带 `tenant_id`，禁止跨租户共用 `dept_id`。
+- **登录主体是用户（`sys_user`）**，不是租户；租户本身不能登录。
+- **平台运维**：`sys_user.tenant_id = 0`（无 `dept_id`）；代管客户时请求头 `X-Operating-Tenant-Id`，业务读写走 `CurrentUser.effective_tenant_id`。
+- **客户租户管理员**：角色如 `tenant_admin`；可管本租户用户/角色/部门/字典 + 已购模块；**不得**挂平台 `admin` 或访问 `/tenants`。
+
+# 模块与 API 拦截
+
+- 平台账号（`tenant_id=0`）**不受**客户 SKU 裁剪菜单/模块门禁；代管只影响业务数据范围。
+- **租户自管**（`/users`、`/roles`、`/depts`、`/dicts`）不按 SKU 当 `system` 模块拦截；平台专属页（租户管理、菜单、接口权限、审计）才需要 `system` SKU。
+- 排产：`SchedulingStore` / 快照 **按 `tenant_id` 隔离**；`POST /scheduling/reset` 只恢复**当前 effective 租户**快照，需权限 `scheduling:baseline:restore`（兼容旧码 `scheduling:demo:reset`）。
+
+# 后端改动习惯
+
+- 列表/写入组织与用户：必须带 `tenant_id` 过滤或 `effective_tenant_id`；平台未选代管时列表返回空，勿抛登录类错误。
+- 新接口权限：在 `api_permission_service.API_META_OVERLAYS` 补 `permission_code`；启动时会 sync 到 `sys_api_permission`。
+- 种子：`scripts/seed.py` 增量同步；新建权限要进 `PERMISSIONS` 并挂到 `admin` 角色。
+
+# 前端改动习惯
+
+- 平台 admin 顶栏「代管租户」→ `operatingTenantStorage` + axios 头 `X-Operating-Tenant-Id`；切换后 `bootstrap()` 刷新用户/菜单，避免整页 reload。
+- 侧栏 SKU 裁剪：`filterMenusByAccess`；平台 admin 传 `enabled_modules: null`；租户自管路径始终可见。
+- 恢复测试数据：`DemoResetButton`；平台 admin 须先选代管租户。
+
+# 通用
+- **按照正式版开发**；按照上线正式项目开发，
+- **最小 diff**；匹配现有命名与分层（`application/*_service.py`、`auth/deps.py`、模块 `register.tsx`）。
+- 用户可见文案用简体中文；不要为「演示版」单独分叉产品逻辑，按正式多租户 SaaS 实现。

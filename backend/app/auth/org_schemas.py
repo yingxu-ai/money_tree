@@ -30,6 +30,7 @@ class DeptOut(BaseModel):
     status: str
     leader: str | None
     phone: str | None
+    tenant_id: int = 1
     children: list["DeptOut"] = Field(default_factory=list)
 
 

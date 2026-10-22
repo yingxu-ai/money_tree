@@ -6,6 +6,7 @@ import ApiPermissionsPage from "@/pages/system/ApiPermissionsPage";
 import AuditPage from "@/pages/system/AuditPage";
 import DeptsPage from "@/pages/system/DeptsPage";
 import DictsPage from "@/pages/system/DictsPage";
+import TenantsPage from "@/pages/system/TenantsPage";
 
 export const systemModule: ModuleRegistration = {
   moduleId: "system",
@@ -14,6 +15,7 @@ export const systemModule: ModuleRegistration = {
     { moduleId: "system", path: "/system/roles", element: <RolesPage /> },
     { moduleId: "system", path: "/system/menus", element: <MenusPage /> },
     { moduleId: "system", path: "/system/api-permissions", element: <ApiPermissionsPage /> },
+    { moduleId: "system", path: "/system/tenants", element: <TenantsPage /> },
     { moduleId: "system", path: "/system/depts", element: <DeptsPage /> },
     { moduleId: "system", path: "/system/dicts", element: <DictsPage /> },
     { moduleId: "system", path: "/system/audit", element: <AuditPage /> },

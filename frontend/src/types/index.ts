@@ -19,6 +19,12 @@ export interface UserInfo {
   email: string | null;
   avatar_url?: string | null;
   tenant_id: number;
+  tenant_code?: string | null;
+  tenant_name?: string | null;
+  is_platform_admin?: boolean;
+  operating_tenant_id?: number | null;
+  operating_tenant_code?: string | null;
+  operating_tenant_name?: string | null;
   dept_id?: number | null;
   dept_name?: string | null;
   status?: string;
@@ -89,6 +95,7 @@ export interface RoleItem {
   data_scope: string;
   menu_ids: number[];
   permission_ids: number[];
+  api_permission_ids?: number[];
 }
 
 export interface MenuItem {

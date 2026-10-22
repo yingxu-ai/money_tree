@@ -7,6 +7,8 @@ from app.application.auth_service import UserService
 from app.application.dept_service import DeptService
 from app.application.dict_service import DictService
 from app.application.rbac_service import MenuService, RoleService
+from app.application.tenant_service import TenantService
+from app.auth.tenant_schemas import TenantCreate, TenantUpdate
 from app.auth.deps import get_current_user, require_permission
 from app.auth.context import CurrentUser
 from app.auth.org_schemas import (
@@ -28,6 +30,7 @@ permissions_router = APIRouter(prefix="/permissions", tags=["权限管理"])
 api_permissions_router = APIRouter(prefix="/api-permissions", tags=["接口权限"])
 depts_router = APIRouter(prefix="/depts", tags=["部门管理"])
 dicts_router = APIRouter(prefix="/dicts", tags=["字典管理"])
+tenants_router = APIRouter(prefix="/tenants", tags=["租户管理"])
 
 
 class ApiPermissionUpsert(BaseModel):
@@ -35,6 +38,7 @@ class ApiPermissionUpsert(BaseModel):
     path_pattern: str
     permission_code: str = ""
     name: str = ""
+    menu_id: int | None = None
     enabled: bool = False
     sort: int = 0
 
@@ -44,6 +48,7 @@ class ApiPermissionPatch(BaseModel):
     path_pattern: str | None = None
     permission_code: str | None = None
     name: str | None = None
+    menu_id: int | None = None
     enabled: bool | None = None
     sort: int | None = None
 
@@ -64,37 +69,40 @@ async def list_users(
     )
 
 
-@users_router.post("", dependencies=[Depends(require_permission("user:create"))])
+@users_router.post("")
 async def create_user(
     payload: UserCreate,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("user:create")),
 ):
     service = UserService(session)
-    user = await service.create_user(payload)
+    user = await service.create_user(payload, tenant_id=current.effective_tenant_id)
     return success(user, trace_id=getattr(request.state, "trace_id", ""))
 
 
-@users_router.put("/{user_id}", dependencies=[Depends(require_permission("user:update"))])
+@users_router.put("/{user_id}")
 async def update_user(
     user_id: int,
     payload: UserUpdate,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("user:update")),
 ):
     service = UserService(session)
-    user = await service.update_user(user_id, payload)
+    user = await service.update_user(user_id, payload, tenant_id=current.effective_tenant_id)
     return success(user, trace_id=getattr(request.state, "trace_id", ""))
 
 
-@users_router.delete("/{user_id}", dependencies=[Depends(require_permission("user:delete"))])
+@users_router.delete("/{user_id}")
 async def delete_user(
     user_id: int,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("user:delete")),
 ):
     service = UserService(session)
-    await service.delete_user(user_id)
+    await service.delete_user(user_id, tenant_id=current.effective_tenant_id)
     return success(None, trace_id=getattr(request.state, "trace_id", ""))
 
 
@@ -186,6 +194,13 @@ async def list_permissions(request: Request, session: AsyncSession = Depends(get
     return success(await service.list_permissions(), trace_id=getattr(request.state, "trace_id", ""))
 
 
+@permissions_router.get("/assign-tree", dependencies=[Depends(require_permission("role:view"))])
+async def permission_assign_tree(request: Request, session: AsyncSession = Depends(get_session)):
+    """角色配权树：菜单（一级/二级）+ 页面下的接口权限规则。"""
+    service = MenuService(session)
+    return success(await service.assign_tree(), trace_id=getattr(request.state, "trace_id", ""))
+
+
 @depts_router.get("")
 async def list_depts(
     request: Request,
@@ -198,38 +213,91 @@ async def list_depts(
     )
 
 
-@depts_router.post("", dependencies=[Depends(require_permission("dept:create"))])
+@depts_router.post("")
 async def create_dept(
     payload: DeptCreate,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("dept:create")),
 ):
     return success(
-        await DeptService(session).create_dept(payload),
+        await DeptService(session).create_dept(payload, tenant_id=current.effective_tenant_id),
         trace_id=getattr(request.state, "trace_id", ""),
     )
 
 
-@depts_router.put("/{dept_id}", dependencies=[Depends(require_permission("dept:update"))])
+@depts_router.put("/{dept_id}")
 async def update_dept(
     dept_id: int,
     payload: DeptUpdate,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("dept:update")),
 ):
     return success(
-        await DeptService(session).update_dept(dept_id, payload),
+        await DeptService(session).update_dept(dept_id, payload, tenant_id=current.effective_tenant_id),
         trace_id=getattr(request.state, "trace_id", ""),
     )
 
 
-@depts_router.delete("/{dept_id}", dependencies=[Depends(require_permission("dept:delete"))])
+@depts_router.delete("/{dept_id}")
 async def delete_dept(
     dept_id: int,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("dept:delete")),
 ):
-    await DeptService(session).delete_dept(dept_id)
+    await DeptService(session).delete_dept(dept_id, tenant_id=current.effective_tenant_id)
+    return success(None, trace_id=getattr(request.state, "trace_id", ""))
+
+
+@tenants_router.get("")
+async def list_tenants(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("tenant:view")),
+):
+    return success(
+        await TenantService(session).list_tenants(current.user),
+        trace_id=getattr(request.state, "trace_id", ""),
+    )
+
+
+@tenants_router.post("")
+async def create_tenant(
+    payload: TenantCreate,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("tenant:create")),
+):
+    return success(
+        await TenantService(session).create_tenant(payload, current.user),
+        trace_id=getattr(request.state, "trace_id", ""),
+    )
+
+
+@tenants_router.put("/{tenant_id}")
+async def update_tenant(
+    tenant_id: int,
+    payload: TenantUpdate,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("tenant:update")),
+):
+    return success(
+        await TenantService(session).update_tenant(tenant_id, payload, current.user),
+        trace_id=getattr(request.state, "trace_id", ""),
+    )
+
+
+@tenants_router.delete("/{tenant_id}")
+async def delete_tenant(
+    tenant_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    current: CurrentUser = Depends(require_permission("tenant:delete")),
+):
+    await TenantService(session).delete_tenant(tenant_id, current.user)
     return success(None, trace_id=getattr(request.state, "trace_id", ""))
 
 

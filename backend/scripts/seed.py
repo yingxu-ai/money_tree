@@ -22,10 +22,12 @@ from app.models.system import (
     SysApiPermission,
     SysDept,
     SysDictItem,
+    SysApiPermission,
     SysDictType,
     SysMenu,
     SysPermission,
     SysRole,
+    SysRoleApiPermission,
     SysRoleMenu,
     SysRolePermission,
     SysTenant,
@@ -71,6 +73,11 @@ PERMISSIONS = [
     ("scheduling:report:start", "工序开工报工", "scheduling", "report_start"),
     ("scheduling:report:early_start", "提前开工", "scheduling", "early_start"),
     ("scheduling:variance:resolve", "计划实绩偏差处置", "scheduling", "variance"),
+    ("scheduling:baseline:restore", "恢复排产测试数据", "scheduling", "baseline_restore"),
+    ("tenant:view", "查看租户", "tenant", "view"),
+    ("tenant:create", "创建租户", "tenant", "create"),
+    ("tenant:update", "更新租户", "tenant", "update"),
+    ("tenant:delete", "删除租户", "tenant", "delete"),
 ]
 
 MENUS = [
@@ -87,6 +94,7 @@ MENUS = [
     (10, 1, "部门管理", "/system/depts", "system/Depts", "MENU", 5, "ApartmentOutlined"),
     (11, 1, "字典管理", "/system/dicts", "system/Dicts", "MENU", 6, "BookOutlined"),
     (25, 1, "接口权限", "/system/api-permissions", "system/ApiPermissions", "MENU", 7, "ApiOutlined"),
+    (27, 1, "租户管理", "/system/tenants", "system/Tenants", "MENU", 0, "ClusterOutlined"),
     # Demo 范本（复制用，非业务）
     (12, None, "Demo 范本", None, None, "CATALOG", 50, "AppstoreOutlined"),
     (13, 12, "总览范本", "/demo/overview", "demo/OverviewTemplate", "MENU", 1, "FundOutlined"),
@@ -108,26 +116,10 @@ MENUS = [
     (72, 70, "单位换算", "/tools/unit-converter", "tools/unit-converter/UnitConverter", "MENU", 2, "SwapOutlined"),
 ]
 
-# 接口权限默认规则（相对 /api/v1）。enabled=True 才会全局拦截。
-# 排产试运行关键动作先入库；其余可在配置台「同步路由」后补齐。
-API_PERMISSION_RULES = [
-    ("GET", "/api-permissions", "api_perm:view", "接口权限列表", True, 10),
-    ("GET", "/api-permissions/routes", "api_perm:view", "已注册路由目录", True, 11),
-    ("POST", "/api-permissions/sync", "api_perm:manage", "同步路由到配置台", True, 12),
-    ("POST", "/api-permissions", "api_perm:manage", "新增接口权限", True, 13),
-    ("PUT", "/api-permissions/{rule_id}", "api_perm:manage", "更新接口权限", True, 14),
-    ("DELETE", "/api-permissions/{rule_id}", "api_perm:manage", "删除接口权限", True, 15),
-    ("GET", "/scheduling/gantt", "scheduling:view", "查看甘特", True, 20),
-    ("GET", "/scheduling/report", "scheduling:view", "工序报工/今日任务", True, 21),
-    ("PUT", "/scheduling/gantt/tasks/{op_id}", "scheduling:gantt:edit", "调整工序计划", True, 22),
-    ("POST", "/scheduling/gantt/tasks/{op_id}/resolve-variance", "scheduling:variance:resolve", "偏差处置", True, 23),
-    ("POST", "/scheduling/gantt/tasks/{op_id}/ack-busy", "scheduling:gantt:edit", "确认并行", True, 24),
-    ("POST", "/scheduling/report/{op_id}/start", "scheduling:report:start", "工序开工", True, 25),
-    ("POST", "/scheduling/report/{op_id}/finish", "scheduling:report:start", "工序完工", True, 26),
-    ("POST", "/scheduling/report/{op_id}/pause", "scheduling:report:start", "工序暂停", True, 27),
-    ("POST", "/scheduling/report/daily-log", "scheduling:report:start", "下班确认签字", True, 28),
-    ("DELETE", "/scheduling/report/daily-log/{log_id}", "scheduling:report:start", "删除报工记录", True, 29),
-]
+# 接口权限默认规则已改为：启动时从 FastAPI 路由按 stable_key 自动同步。
+# 中文名 / 兼容权限码见 app.application.api_permission_service.API_META_OVERLAYS。
+API_PERMISSION_RULES: list[tuple] = []
+
 
 # equipment-ops 分支曾占用的菜单 id（与本分支 15～20 冲突）；seed 时软删除，避免挂在「运行调优」下
 # 19/20：原「全局风险」「运行调优」已并入「分析诊断」
@@ -160,21 +152,30 @@ RETIRED_MENU_IDS = [
 ]
 
 # 示例部门树（固定 id，便于挂用户）
+# 租户 1（内置样板客户）组织树
 DEPTS = [
-    # (id, parent_id, name, code, sort)
-    (1, None, "总部", "HQ", 1),
-    (2, 1, "生产部", "PROD", 1),
-    (3, 1, "技术部", "TECH", 2),
-    (11, 1, "质量部", "QA", 3),
-    (4, 2, "一车间", "PROD-1", 1),
-    (5, 2, "二车间", "PROD-2", 2),
-    (6, 2, "动力部", "POWER", 3),
-    (7, 2, "三车间", "PROD-3", 4),
-    (8, 2, "仓储物流部", "WH", 5),
-    (9, 3, "实验室", "LAB", 1),
-    (10, 3, "设备工程部", "ENG", 2),
-    (12, 11, "质检中心", "QC", 1),
-    (13, 11, "计量站", "MET", 2),
+    # (id, parent_id, name, code, sort, tenant_id)
+    (1, None, "总部", "HQ", 1, 1),
+    (2, 1, "生产部", "PROD", 1, 1),
+    (3, 1, "技术部", "TECH", 2, 1),
+    (11, 1, "质量部", "QA", 3, 1),
+    (4, 2, "一车间", "PROD-1", 1, 1),
+    (5, 2, "二车间", "PROD-2", 2, 1),
+    (6, 2, "动力部", "POWER", 3, 1),
+    (7, 2, "三车间", "PROD-3", 4, 1),
+    (8, 2, "仓储物流部", "WH", 5, 1),
+    (9, 3, "实验室", "LAB", 1, 1),
+    (10, 3, "设备工程部", "ENG", 2, 1),
+    (12, 11, "质检中心", "QC", 1, 1),
+    (13, 11, "计量站", "MET", 2, 1),
+]
+
+# 客户A（tenant_id=2）独立组织树，禁止与租户1共用 dept_id
+TENANT_A_DEPTS = [
+    (101, None, "客户A总部", "CA-HQ", 1, 2),
+    (102, 101, "生产中心", "CA-PROD", 1, 2),
+    (103, 101, "计划调度", "CA-PLAN", 2, 2),
+    (104, 102, "一车间", "CA-W1", 1, 2),
 ]
 
 DICT_TYPES = [
@@ -326,18 +327,27 @@ async def _sync_demo_dashboard(session) -> None:
 
 
 async def _sync_depts_and_dicts(session) -> None:
-    """增量同步示例部门树与字典。"""
-    for did, parent_id, name, code, sort in DEPTS:
+    """增量同步各租户独立组织树与（平台共享）字典。"""
+    for did, parent_id, name, code, sort, tenant_id in [*DEPTS, *TENANT_A_DEPTS]:
         exists = (await session.execute(select(SysDept).where(SysDept.id == did))).scalar_one_or_none()
         if exists is None:
             session.add(
-                SysDept(id=did, parent_id=parent_id, name=name, code=code, sort=sort, status="active")
+                SysDept(
+                    id=did,
+                    parent_id=parent_id,
+                    name=name,
+                    code=code,
+                    sort=sort,
+                    status="active",
+                    tenant_id=tenant_id,
+                )
             )
         else:
             exists.parent_id = parent_id
             exists.name = name
             exists.code = code
             exists.sort = sort
+            exists.tenant_id = tenant_id
             exists.is_deleted = False
     await session.flush()
 
@@ -376,6 +386,39 @@ async def _sync_depts_and_dicts(session) -> None:
         else:
             exists.label = label
             exists.sort = sort
+
+
+async def _ensure_role_api_from_perm_codes(
+    session,
+    role_id: int,
+    perm_codes: set[str],
+) -> None:
+    """按权限码给角色挂上对应启用接口规则。"""
+    if not perm_codes:
+        return
+    rules = (
+        await session.execute(
+            select(SysApiPermission).where(
+                SysApiPermission.permission_code.in_(list(perm_codes)),
+                SysApiPermission.enabled.is_(True),
+            )
+        )
+    ).scalars().all()
+    for rule in rules:
+        if rule.id is None:
+            continue
+        linked = (
+            await session.execute(
+                select(SysRoleApiPermission).where(
+                    SysRoleApiPermission.role_id == role_id,
+                    SysRoleApiPermission.api_permission_id == rule.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if linked is None:
+            session.add(
+                SysRoleApiPermission(role_id=role_id, api_permission_id=rule.id)
+            )
 
 
 async def _ensure_role_links(
@@ -438,12 +481,14 @@ async def _sync_org_scope_demo(session) -> None:
             password_hash=hash_password("plant123"),
             display_name="生产部经理",
             status="active",
+            tenant_id=1,
             dept_id=2,
         )
         session.add(plant)
         await session.flush()
     else:
-        plant.dept_id = plant.dept_id or 2
+        plant.tenant_id = 1
+        plant.dept_id = 2
         plant.is_deleted = False
         plant.status = "active"
 
@@ -463,9 +508,15 @@ async def _sync_org_scope_demo(session) -> None:
                 password_hash=hash_password("line123"),
                 display_name="一车间员",
                 status="active",
+                tenant_id=1,
                 dept_id=4,
             )
         )
+    else:
+        line1.tenant_id = 1
+        line1.dept_id = 4
+        line1.is_deleted = False
+        line1.status = "active"
 
 
 async def _sync_menus_and_permissions(session) -> None:
@@ -546,13 +597,83 @@ async def _sync_menus_and_permissions(session) -> None:
             menu.visible = False
 
 
+async def _sync_tenant_admin_role(session) -> None:
+    """客户租户管理员：本租户内组织/账号/角色/字典 + 已购业务模块（不含平台租户管理）。"""
+    role = (
+        await session.execute(
+            select(SysRole).where(SysRole.code == "tenant_admin", SysRole.is_deleted.is_(False))
+        )
+    ).scalar_one_or_none()
+    if role is None:
+        role = SysRole(name="租户管理员", code="tenant_admin", data_scope="ALL")
+        session.add(role)
+        await session.flush()
+    else:
+        role.name = "租户管理员"
+        role.data_scope = "ALL"
+        role.is_deleted = False
+
+    await _ensure_role_links(
+        session,
+        role,
+        # 1=系统管理目录（否则 users/depts 等子菜单挂不上树）
+        menu_ids={1, 2, 3, 10, 11, 60, 61, 62, 63, 64},
+        perm_codes={
+            "user:view",
+            "user:create",
+            "user:update",
+            "user:delete",
+            "role:view",
+            "role:assign",
+            "dept:view",
+            "dept:create",
+            "dept:update",
+            "dept:delete",
+            "dict:view",
+            "dict:create",
+            "dict:update",
+            "dict:delete",
+            "scheduling:view",
+            "scheduling:gantt:edit",
+            "scheduling:report:start",
+            "scheduling:report:early_start",
+            "scheduling:variance:resolve",
+        },
+    )
+    await _ensure_role_api_from_perm_codes(
+        session,
+        role.id,
+        {
+            "user:view",
+            "user:create",
+            "user:update",
+            "user:delete",
+            "role:view",
+            "role:assign",
+            "dept:view",
+            "dept:create",
+            "dept:update",
+            "dept:delete",
+            "dict:view",
+            "dict:create",
+            "dict:update",
+            "dict:delete",
+            "scheduling:view",
+            "scheduling:gantt:edit",
+            "scheduling:report:start",
+            "scheduling:report:early_start",
+            "scheduling:variance:resolve",
+        },
+    )
+
+
 async def _sync_tenants_and_sku_demo(session) -> None:
-    """租户 SKU 演示：租户1全开；租户2(customer_a)仅排产 + 账号 tenant_a。"""
+    """租户与模块开通（售卖 SKU）。"""
     from datetime import datetime
 
     demos = [
-        (1, "演示租户（全模块）", "demo", "*", "本地默认，admin 所在租户"),
-        (2, "客户A（仅排产）", "customer_a", "scheduling", "售卖模式B本地测试：只开通排产"),
+        (1, "样板客户（全模块）", "template", "*", "内置样板租户，用于全功能验收"),
+        (2, "客户A（仅排产）", "customer_a", "scheduling", "示例：仅开通生产排产模块"),
     ]
     for tid, name, code, modules, remark in demos:
         row = (
@@ -579,8 +700,10 @@ async def _sync_tenants_and_sku_demo(session) -> None:
             row.is_deleted = False
     await session.flush()
 
-    admin_role = (
-        await session.execute(select(SysRole).where(SysRole.code == "admin", SysRole.is_deleted.is_(False)))
+    tenant_admin_role = (
+        await session.execute(
+            select(SysRole).where(SysRole.code == "tenant_admin", SysRole.is_deleted.is_(False))
+        )
     ).scalar_one_or_none()
 
     user = (
@@ -593,26 +716,44 @@ async def _sync_tenants_and_sku_demo(session) -> None:
             display_name="客户A用户",
             status="active",
             tenant_id=2,
-            dept_id=1,
+            dept_id=101,
         )
         session.add(user)
         await session.flush()
     else:
         user.tenant_id = 2
+        user.dept_id = 101
         user.status = "active"
         user.is_deleted = False
+        user.display_name = "客户A用户"
 
-    if admin_role is not None:
+    if tenant_admin_role is not None:
+        for rid in (
+            await session.execute(
+                select(SysUserRole.role_id).where(SysUserRole.user_id == user.id)
+            )
+        ).scalars().all():
+            if rid != tenant_admin_role.id:
+                row = (
+                    await session.execute(
+                        select(SysUserRole).where(
+                            SysUserRole.user_id == user.id,
+                            SysUserRole.role_id == rid,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is not None:
+                    await session.delete(row)
         linked = (
             await session.execute(
                 select(SysUserRole).where(
                     SysUserRole.user_id == user.id,
-                    SysUserRole.role_id == admin_role.id,
+                    SysUserRole.role_id == tenant_admin_role.id,
                 )
             )
         ).scalar_one_or_none()
         if linked is None:
-            session.add(SysUserRole(user_id=user.id, role_id=admin_role.id))
+            session.add(SysUserRole(user_id=user.id, role_id=tenant_admin_role.id))
 
 
 async def _sync_api_permissions(session) -> None:
@@ -656,18 +797,20 @@ async def seed() -> None:
             await _sync_depts_and_dicts(session)
             await _sync_org_scope_demo(session)
             await _sync_tenants_and_sku_demo(session)
+            await _sync_tenant_admin_role(session)
             admin = (
                 await session.execute(
                     select(SysUser).where(SysUser.username == settings.default_admin_username)
                 )
             ).scalar_one_or_none()
-            if admin and admin.dept_id is None:
-                admin.dept_id = 1
+            if admin:
+                admin.tenant_id = 0
+                admin.dept_id = None
             await session.commit()
             print(
-                "种子数据已存在，已同步品牌/菜单/部门/租户SKU。"
-                " 测试账号 tenant_a / tenant_a123（租户2仅排产）；"
-                f"管理员 {settings.default_admin_username}（租户1全开）"
+                "种子数据已存在，已同步品牌/菜单/部门/租户。"
+                f" 平台管理员 {settings.default_admin_username}（全局，请在顶栏选择代管租户）；"
+                " 客户A tenant_a / tenant_a123（租户2，仅排产）"
             )
             return
 
@@ -704,9 +847,10 @@ async def seed() -> None:
         admin = SysUser(
             username=settings.default_admin_username,
             password_hash=hash_password(settings.default_admin_password),
-            display_name="系统管理员",
+            display_name="平台管理员",
             status="active",
-            dept_id=1,
+            tenant_id=0,
+            dept_id=None,
         )
         session.add(admin)
         await session.flush()
@@ -776,6 +920,7 @@ async def seed() -> None:
         await _upsert_branding_configs(session)
         await _sync_api_permissions(session)
         await _sync_tenants_and_sku_demo(session)
+        await _sync_tenant_admin_role(session)
         session.add(
             SysConfig(
                 scope_type="SYSTEM",
@@ -788,8 +933,8 @@ async def seed() -> None:
 
         await session.commit()
         print(
-            f"种子数据初始化完成。管理员: {settings.default_admin_username} / {settings.default_admin_password}；"
-            "客户A: tenant_a / tenant_a123（仅排产）"
+            f"种子数据初始化完成。平台管理员: {settings.default_admin_username} / {settings.default_admin_password}；"
+            "客户A: tenant_a / tenant_a123（租户管理员，仅排产）"
         )
 
 if __name__ == "__main__":

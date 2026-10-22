@@ -26,20 +26,40 @@ MENU_PATH_MODULE_PREFIXES: list[tuple[str, str]] = [
     ("/analysis", "equipment-analysis"),
     ("/tools", "toolbox"),
     ("/demo", "demo"),
-    ("/system", "system"),
+    # 平台专属系统页（须 SKU 含 system，或平台账号）
+    ("/system/tenants", "system"),
+    ("/system/menus", "system"),
+    ("/system/api-permissions", "system"),
+    ("/system/audit", "system"),
+    # 租户自管组织：不映射模块 → SKU 裁剪时始终保留
+    # /system/users /roles /depts /dicts
     ("/dashboards", "dashboard"),
     ("/ai-assistant", "dashboard"),
     ("/configs", "dashboard"),
     ("/files", "dashboard"),
 ]
 
+# 租户自管页：不参与 SKU 裁剪
+TENANT_SELF_ADMIN_MENU_PREFIXES = (
+    "/system/users",
+    "/system/roles",
+    "/system/depts",
+    "/system/dicts",
+)
+
 
 def module_for_menu_path(path: str | None) -> str | None:
     if not path:
         return None
+    for prefix in TENANT_SELF_ADMIN_MENU_PREFIXES:
+        if path == prefix or path.startswith(prefix + "/"):
+            return None
     for prefix, module_id in MENU_PATH_MODULE_PREFIXES:
         if path == prefix or path.startswith(prefix + "/"):
             return module_id
+    # 未细分的 /system/* 默认视为平台 system
+    if path == "/system" or path.startswith("/system/"):
+        return "system"
     return None
 
 
@@ -52,6 +72,8 @@ async def get_tenant_enabled_modules(
     None = 全开（不限制）。
     优先读 sys_tenant.enabled_modules；无租户记录时回退全局 ENABLED_MODULES。
     """
+    if tenant_id is not None and tenant_id <= 0:
+        return None
     if tenant_id is not None:
         row = (
             await session.execute(

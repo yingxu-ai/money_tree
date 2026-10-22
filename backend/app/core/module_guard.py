@@ -14,15 +14,13 @@ MODULE_API_PREFIXES: dict[str, list[str]] = {
     "scheduling": ["/scheduling"],
     "equipment-analysis": ["/equipment-analysis"],
     "demo": ["/demo"],
+    # 平台侧系统能力（租户开通 SKU 不含此项时不可访问）
     "system": [
-        "/users",
-        "/roles",
         "/menus",
         "/permissions",
         "/api-permissions",
-        "/depts",
-        "/dicts",
         "/audit",
+        "/tenants",
     ],
     "dashboard": ["/dashboards", "/metrics", "/configs", "/files"],
 }
@@ -32,6 +30,11 @@ ALWAYS_ALLOW_PREFIXES = (
     "/auth",
     "/health",
     "/runtime",
+    # 租户自管组织：任意客户租户都可管人/角色/部门/字典（不按 SKU 拦截）
+    "/users",
+    "/roles",
+    "/depts",
+    "/dicts",
 )
 
 
@@ -87,6 +90,9 @@ async def assert_module_allowed(
     from app.application.tenant_sku import get_tenant_enabled_modules
 
     tenant_id = _tenant_id_from_credentials(credentials)
+    # 平台运维账号（tenant_id=0）：代管客户只影响业务数据，不按客户 SKU 拦截平台管理接口
+    if tenant_id is not None and tenant_id <= 0:
+        return
     enabled = await get_tenant_enabled_modules(session, tenant_id)
     if enabled is None:
         return

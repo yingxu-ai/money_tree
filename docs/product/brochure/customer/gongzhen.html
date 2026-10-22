@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工诊 · 设备健康分析｜先看清坏在哪，再决定修还是调</title>
+<meta name="description" content="工诊把设备告警从“超限了”变成可解释的诊断、未来风险和带约束的运行优化。覆盖生产机台与空压、泵、冷水机组等动力设备，可单独上线。">
+<meta property="og:title" content="工诊 · 设备健康分析｜先看清坏在哪，再决定修还是调">
+<meta property="og:description" content="工诊把设备告警从“超限了”变成可解释的诊断、未来风险和带约束的运行优化。覆盖生产机台与空压、泵、冷水机组等动力设备，可单独上线。">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="zh_CN">
+<link rel="stylesheet" href="_customer.css">
+</head>
+<body class="m-gongzhen">
+<a class="skip" href="#main">跳到正文</a>
+
+<div class="topbar no-print">
+  <div class="topbar-inner">
+    <a class="logo" href="index.html">元启·工小智 <span>工诊</span></a>
+    <nav class="nav" aria-label="页面导航"><a href="index.html">总览</a><a href="zhipai.html">智排</a><a class="current" href="gongzhen.html">工诊</a><a href="zhijian.html">智检</a><a href="zhifang.html">智方</a><a href="zhiyi.html">智艺</a><a href="zhigui.html">智规</a></nav>
+    <div class="top-actions">
+      <button class="btn btn-ghost btn-sm print-btn" type="button" onclick="window.print()">打印 / PDF</button>
+      <a class="btn btn-primary btn-sm" href="#contact">预约演示</a>
+    </div>
+  </div>
+</div>
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">元启·工小智 · 设备健康分析（工诊）· 已上线</div>
+        <h1>先看清坏在哪，<br>再决定修还是调</h1>
+        <p class="lead">设备告警只告诉你“超限了”，工诊继续回答：哪类故障、证据是否一致、未来 72 小时会不会恶化、先修还是先调参。覆盖生产机台和空压、泵、冷水机组等动力设备。</p>
+        <p class="hero-audience">谁最该看：设备主管、维修工程师、能源 / 运行岗</p>
+        <div class="badges"><span class="badge">可接现有测点</span><span class="badge">不用先上智排</span><span class="badge">可单独上线</span></div>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="#contact">预约演示</a>
+          <a class="btn btn-ghost" href="#how">看它怎么诊断</a>
+        </div>
+        <p class="hero-note">适合：关键设备停机损失高、已有或计划接 PLC / 电气 / 环境测点、动力站与产线设备并存的工厂。</p>
+      </div>
+      <div class="hero-visual">
+<figure class="viz-card" role="img" aria-label="设备健康示意图：空压机健康度82，未来72小时风险中等，振动趋势上升，建议降负荷并点检。">
+  <div class="viz-head"><div><strong>设备健康</strong><span class="viz-sub">空压站 3# · 示意</span></div><span class="pill pill-warn">关注</span></div>
+  <div class="health-top">
+    <div class="gauge" style="--v:82"><div><b>82</b><span>健康度</span></div></div>
+    <div class="kpi-list">
+      <div><span>未来 72h 风险</span><b class="warn">中</b></div>
+      <div><span>未关闭事件</span><b>2</b></div>
+      <div><span>振动趋势</span><b class="warn">上升</b></div>
+    </div>
+  </div>
+  <svg class="spark" viewBox="0 0 320 54" aria-hidden="true"><polygon class="area" points="0,48 0,40 40,38 80,36 120,32 160,34 200,26 240,22 280,14 320,10 320,54 0,54"/><polyline points="0,40 40,38 80,36 120,32 160,34 200,26 240,22 280,14 320,10"/></svg>
+  <div class="viz-foot"><span class="chip chip-red">证据一致</span><span class="chip chip-warn">建议：降负荷 + 点检</span><span class="chip">72h 风险</span></div>
+</figure>
+</div>
+    </div>
+    <p class="print-cover-note">设备健康分析（工诊） · 产品介绍 · 2026-10</p>
+  </div>
+</header>
+<main id="main">
+
+<section id="pain">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">01 · 你是不是也这样</div><h2>工厂不缺测点，缺“证据 → 结论 → 动作”</h2><p class="lead">SCADA 和告警台能说“超限了”，却很难说清是哪类故障、会不会恶化、该先修还是先调、备件怎么准备。</p></div>
+    <div class="grid-3">
+      <article class="card pain">
+        <div class="kicker">停机</div>
+        <h3>坏了才知道</h3>
+        <p>非计划停机打乱交期，备件被动采购，产能承诺失信。</p>
+        <div class="answer">→ 未来风险与 RUL 分口径可见</div>
+      </article>
+      <article class="card pain">
+        <div class="kicker">噪声</div>
+        <h3>告警刷屏，真正危险被淹没</h3>
+        <p>红黄绿太多，值班人员疲劳；最后变成“看到红再说”。</p>
+        <div class="answer">→ 结论 + 证据 + 原因概率，而不是堆测点</div>
+      </article>
+      <article class="card pain">
+        <div class="kicker">优化</div>
+        <h3>建议不敢用</h3>
+        <p>节能 / 提负荷建议和报警并存，怕越调越糟。</p>
+        <div class="answer">→ 异常未关闭时，阻断激进调优</div>
+      </article></div>
+  </div>
+</section>
+
+<section class="band" id="how">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">02 · 用起来是什么样</div><h2>接一次测点，先看机队，再下钻单机</h2><p class="lead">设备主管先圈范围，工程师再看证据；不用一上来接全厂。</p></div>
+    <div class="steps">
+      <div class="step">
+        <div class="n">STEP 01 · 一次</div><h3>接关键测点</h3><p>数据源、测点分类、设备绑定；先接关键设备的关键测点，有 PLC / 电气 / 环境数据即可。</p><div class="who">信息化 / 设备</div>
+      </div>
+      <div class="step">
+        <div class="n">STEP 02 · 每天</div><h3>看机队</h3><p>按部门、类型、运行状态圈范围；先看异常和未来风险，再下钻单机。</p><div class="who">设备主管 / 工程师</div>
+      </div>
+      <div class="step">
+        <div class="n">STEP 03 · 每天</div><h3>诊断与处置</h3><p>对照分析给结论、证据、原因概率和处置步骤；事件关闭后再谈优化。</p><div class="who">维修 / 能源岗</div>
+      </div></div>
+    <div class="roles" aria-label="使用角色"><span class="role"><b>设备 / 维修</b> 诊断、处置、备件</span><span class="role"><b>能源 / 运行</b> 节能、平衡、负荷</span><span class="role"><b>设备主管</b> 机队、风险、维修窗口</span><span class="role"><b>信息化</b> 测点、绑定、权限</span></div>
+    <div class="callout"><div class="ico" aria-hidden="true">i</div><p><strong>不依赖智排也能用。</strong>工诊自己就能建采集—诊断—预测—优化链路；和智排合买时，设备编码对齐，排产会与维修会用同一套事实。</p></div>
+  </div>
+</section>
+
+<section id="diff">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">03 · 三个关键差异</div><h2>从“看见超限”到“能开会决策”</h2><p class="lead">告警是起点，不是结论；工诊给的是能讨论、能执行的结论包。</p>
+      <div class="flags"><span class="flag blue">现状健康</span><span class="flag amber">未来风险 · 分口径</span></div>
+    </div>
+    <div class="diff">
+      <article class="card">
+        <div class="tagline">输出</div><h3>不是告警列表，是结论包</h3><p>结论、证据、原因概率、处置步骤放在一起；值班和维修能照着做，也能上会。</p>
+      </article>
+      <article class="card">
+        <div class="tagline">时间</div><h3>现状与未来分开看</h3><p>不揉成一个红黄绿；24h / 72h / 7d 风险分开，避免“今天没事”掩盖明天的事。</p>
+      </article>
+      <article class="card">
+        <div class="tagline">优化</div><h3>先安全稳定，再谈节能</h3><p>报警未关闭，阻断激进调优；优化建议必须过设备状态约束，避免带病优化。</p>
+      </article></div>
+    
+<div class="signature">
+  <div class="sig-title">同一条告警，两种读法</div>
+  <div class="sig-two">
+    <div class="sig-cell"><span class="sig-label">告警台</span><b>3# 空压机振动超限</b><p>只知道“超了”，不知道原因和下一步。</p></div>
+    <div class="sig-cell good"><span class="sig-label">工诊</span><b>轴承概率 62% · 72h 风险中</b><p>证据一致；建议降负荷 + 点检，备件提前准备。</p></div>
+  </div>
+</div>
+  </div>
+</section>
+
+<section class="band" id="scenario">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">04 · 一个具体场景</div><h2>空压站异响，值班不知道要不要停机</h2><p class="lead">从“盯一条报警”到“有结论、有步骤、有风险窗口”。</p></div>
+    <div class="timeline">
+      <div class="t-item"><div class="time">09:10</div><h3>圈范围</h3><p>总览筛动力车间异常设备，看到 3# 空压机振动上升。</p></div>
+      <div class="t-item"><div class="time">09:15</div><h3>看证据</h3><p>单机对照：振动与电流证据一致，原因概率指向轴承。</p></div>
+      <div class="t-item"><div class="time">09:20</div><h3>先处置</h3><p>先降负荷 + 安排点检；查看 72h 风险是否继续上升。</p></div>
+      <div class="t-item"><div class="time">09:30</div><h3>闭环</h3><p>事件关闭或转维修工单，备件与窗口有提示。</p></div></div>
+    <div class="compare-box">
+      <div class="before"><b>以前</b>盯着一条报警，靠老师傅判断停不停；停错了影响生产，不停又怕坏。</div>
+      <div class="after"><b>现在</b>有结论、有处置步骤、有风险窗口；当班就能做决定。</div>
+    </div>
+    <p class="tiny" style="margin-top:12px">以上为示例场景，设备与数据为示意；实际效果以试点数据为准。</p>
+  </div>
+</section>
+
+<section id="fit">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">05 · 适不适合你</div><h2>先看数据、设备和维修流程</h2><p class="lead">没有测点和处置流程，诊断落不了地。</p></div>
+    <div class="fit">
+      <div class="fit-col yes"><h3>通常会比较适合</h3><ul><li>关键设备停机损失高，备件 / 维修被动</li><li>动力站与产线设备并存，需要机队视野</li><li>已有或计划接 PLC / 电气 / 环境测点</li><li>想从“看报警”升级到“可解释诊断 + 约束优化”</li><li>多车间 / 多工厂，需要按组织范围授权</li></ul></div>
+      <div class="fit-col no"><h3>建议先别急</h3><ul><li>设备没有任何数据，也不打算接</li><li>只想看一个总览大屏，不需要处置闭环</li><li>期望 AI 直接下维修指令、人不用确认</li><li>关键设备少且停机损失低</li><li>没有点检 / 维修流程可以承接</li></ul></div>
+      <div class="gate"><b>上线门槛</b><p>至少要有：一类关键设备、5–10 个可用测点、能承接处置的维修 / 点检流程。</p></div>
+    </div>
+    <p class="tiny" style="margin-top:12px">不符合不代表永远不能用，但先选一类关键设备试点更稳。</p>
+  </div>
+</section>
+
+<section class="band" id="start">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">06 · 怎么开始</div><h2>先在一类设备上，接一周数据</h2><p class="lead">选停机损失最高的一类设备，接 5–10 个测点，用已知故障验证诊断。</p></div>
+    <div class="start-grid">
+      <div class="panel">
+        <h3>试点三步</h3><ol class="start-steps"><li><b>选一类关键设备</b><span>停机损失最高、故障重复出现的那一类。</span></li><li><b>接 5–10 个关键测点</b><span>振动、温度、电流、压力等；先接能支撑诊断的，不求全。</span></li><li><b>用一周数据 + 已知故障验证</b><span>看证据是否一致、误报多少、处置是否可执行。</span></li></ol>
+        <div class="spec"><div><b>部署</b>云端开通（SaaS），或本地部署</div><div><b>终端</b>设备主管 / 工程师用电脑；现场可用平板</div><div><b>数据</b>账号、组织、权限随平台</div><div><b>服务</b>上线培训 + 使用答疑</div></div>
+      </div>
+      <div class="panel">
+        <h3>试点前，你只需要准备这些</h3><ul class="checklist"><li>设备清单：编号、名称、类型、所属车间</li><li>现有数据源与测点清单（PLC / 电气 / 环境）</li><li>点检、维修、备件流程</li><li>近半年故障与停机记录</li><li>网络与采集边界（哪些数据能出）</li></ul>
+        <p class="tiny" style="margin-top:12px">测点接入范围与数据质量决定诊断效果；试点前先做一次数据可用性确认。</p>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:18px"><div class="ico" aria-hidden="true">价</div><p><strong>怎么报价：</strong>按设备类型、测点规模和上线范围沟通；可以先选一类设备试点，再决定扩展。具体功能、交付范围与报价以合同为准。</p></div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head"><div class="eyebrow">07 · 常见问题</div><h2>你可能还会问</h2></div>
+    <div class="faq"><div class="faq-item"><h3>一定要接很多测点吗？</h3><p>不用。先接关键设备的关键测点，能支撑诊断即可；不必一次铺满全厂。</p></div><div class="faq-item"><h3>和 SCADA / 告警台什么关系？</h3><p>不替代采集和告警；工诊在告警之上做证据对照、原因判断、风险预测和处置闭环。</p></div><div class="faq-item"><h3>能预测剩余寿命吗？</h3><p>提供多时间窗风险和 RUL 及置信；设备离线时预测会暂停，避免给出假精确。</p></div><div class="faq-item"><h3>报警没关闭，能优化吗？</h3><p>不能。异常未关闭时系统会阻断激进调优，先处置再谈节能 / 负荷。</p></div><div class="faq-item"><h3>多久能上线、多少钱？</h3><p>取决于测点与数据质量；按设备类型、测点规模和上线范围沟通，先试点再决定。</p></div><div class="faq-item"><h3>数据放哪？安全吗？</h3><p>支持云端开通或本地部署；账号、组织、权限随平台，按部门范围授权。</p></div></div>
+  </div>
+</section>
+
+<section class="band" id="contact">
+  <div class="wrap">
+    <div class="contact">
+      <div>
+        <div class="eyebrow">下一步</div>
+        <h2>想看工诊适不适合你们厂？</h2>
+        <p>把设备清单和现有测点 / 告警截图发来，先做一次 30 分钟线上沟通。不适合会直接说，不浪费彼此时间。</p>
+        <p class="contact-give">你会拿到：一份关键设备的诊断样例（证据 / 结论 / 处置建议）。</p>
+        <div class="contact-lines">
+          <div><b>联系人</b>【姓名】</div>
+          <div><b>电话</b>【手机】</div>
+          <div><b>微信</b>【微信号】</div>
+          <div><b>邮箱</b>【邮箱】</div>
+        </div>
+        <p class="tiny">微信扫码或直接电话联系，都可以。</p>
+        <p class="print-only-foot">合同物料：设备健康分析模块（工诊） · 2026-10<br>具体功能、交付范围与报价以合同为准；界面为示意，场景数据为示例。</p>
+      </div>
+      <div class="qr">二维码位置<br><span style="font-size:11px">替换为销售微信</span></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="big">元启·工小智 · 工诊</div>
+    <p>合同物料名：设备健康分析模块（工诊）。本页为产品介绍；具体功能、交付范围与报价以合同为准。界面为示意，场景数据为示例。</p>
+    <div class="links"><a href="index.html">全部模块</a><a href="zhipai.html">智排</a><a href="gongzhen.html">工诊</a><a href="zhijian.html">智检</a><a href="zhifang.html">智方</a><a href="zhiyi.html">智艺</a><a href="zhigui.html">智规</a><a href="../modules/gongzhen.html">给计划员 / IT：详细能力说明</a></div>
+    <p class="tiny" style="margin-top:12px">版本 2026-10 · 元启·工小智</p>
+  </div>
+</footer>
+</body>
+</html>

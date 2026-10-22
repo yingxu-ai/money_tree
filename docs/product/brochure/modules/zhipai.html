@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>智排 · 智能排产模块 — 元启·工小智</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="_shared.css" />
+  <style>.hero-bg { --hero-img: url("assets/gongxiaozhi-dual.jpg"); }</style>
+</head>
+<body>
+  <div class="topbar no-print">
+    <div class="topbar-inner">
+      <a class="logo" href="../index.html">元启·工小智 <span>智排</span></a>
+      <nav class="nav">
+        <a class="on" href="zhipai.html">智排</a>
+        <a href="gongzhen.html">工诊</a>
+        <a href="zhijian.html">智检</a>
+        <a href="zhifang.html">智方</a>
+        <a href="zhiyi.html">智艺</a>
+        <a href="zhigui.html">智规</a>
+      </nav>
+      <button class="btn btn-ghost" type="button" onclick="window.print()">打印 / PDF</button>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-content">
+      <div class="eyebrow">元启·工小智 · 能力域单册</div>
+      <h1>智排 <span class="tag">可售</span></h1>
+      <p class="lead">智能排产模块 — 把交期、人、机、班次一次排清：插单可试、冲突可分、现场可报。面向多品种、小批量、多班制、设备争用明显的离散制造车间。</p>
+      <div class="hero-meta">
+        <span>合同物料：智能排产模块（智排）</span>
+        <span>可独立采购 · 可与工诊 / 智检等合买</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="no-print" style="padding-top:28px;padding-bottom:0">
+    <div class="wrap">
+      <nav class="toc" aria-label="本页目录">
+        <a href="#pain">痛点场景</a>
+        <a href="#value">交付价值</a>
+        <a href="#roles">角色与动作</a>
+        <a href="#loop">能力闭环</a>
+        <a href="#layers">人机分层</a>
+        <a href="#conflict">冲突引擎</a>
+        <a href="#plan">计划智能</a>
+        <a href="#shopfloor">现场报工</a>
+        <a href="#scenes">典型场景</a>
+        <a href="#diff">差异对比</a>
+        <a href="#fit">适用自检</a>
+        <a href="#combo">合买协同</a>
+      </nav>
+    </div>
+  </section>
+
+  <section id="pain">
+    <div class="wrap">
+      <div class="sec-label">01 · 为什么需要智排</div>
+      <h2>车间真正的痛，往往不在「有没有甘特图」</h2>
+      <div class="prose">
+        <p>多数工厂并不缺表格或 MES 里的排程菜单，缺的是一套<strong>懂车间规则</strong>的计划体系：人是否到岗、机是否可占、班次是否重叠、插单改完能不能回退、现场报工能不能对上计划。</p>
+        <p>智排的目标不是「再画一张漂亮的图」，而是让计划员敢改、班组长敢调、现场敢报、主管看得见风险。</p>
+      </div>
+      <div class="grid-2">
+        <div class="card pain"><strong>交期靠人脑、插单靠吼</strong><p>紧急单一来，Excel 全表重排；改完发现焊机被两个人同时占，现场才爆出来。</p><p class="sub">后果：加班赶工仍延误，客户信任透支。</p></div>
+        <div class="card pain"><strong>人机混排、规则打架</strong><p>周历里既排人又排机，或只排班组不落具体机台；多机班组被「班组互斥」误杀合理并行。</p><p class="sub">后果：计划天天改，没人信计划。</p></div>
+        <div class="card pain"><strong>冲突要么全红要么全不管</strong><p>通用排程一刀切卡死；Excel 又发现不了抢机。同班多单本可串行，却被当成硬冲突。</p><p class="sub">后果：系统不可用，又退回口头调度。</p></div>
+        <div class="card pain"><strong>计划与现场两张皮</strong><p>甘特在办公室，报工在纸上或另一个 App；偏差无人处置，排程永远「理想态」。</p><p class="sub">后果：主管看不清真实负荷与延误桶。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="value">
+    <div class="wrap">
+      <div class="sec-label">02 · 单买即可交付的价值</div>
+      <h2>不依赖 IoT，也能先把交期与争用管住</h2>
+      <div class="prose">
+        <p>智排可独立上线：仅凭<strong>计划占用 + 报工实绩</strong>，即可表达设备「在跑 / 空闲」（空闲 ≈ 启用且该时段无计划占用）。适合作为元启·工小智在工厂的第一块落子。</p>
+      </div>
+      <div class="grid-3">
+        <div class="card"><strong>计划敢改</strong><p>试排沙箱 + 影响预览 + 发布/放弃，插单不再「改死回不去」。</p></div>
+        <div class="card"><strong>冲突可读</strong><p>硬冲突与超载分档，贴近「同班串行」的真实习惯。</p></div>
+        <div class="card"><strong>现场可追</strong><p>报工签字与偏差处置同体系，计划不再停在图上。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="roles">
+    <div class="wrap">
+      <div class="sec-label">03 · 谁在用</div>
+      <h2>同一套数据，不同角色各取所需</h2>
+      <table class="role-table">
+        <thead><tr><th>角色</th><th>典型动作</th></tr></thead>
+        <tbody>
+          <tr><th>计划 / 排产员</th><td>维护班制、班组、技能、设备、人员、工序模板与排班周历；建工单并按模板展开工序；发起自动排产 / 重排；管理优先级与插单。</td></tr>
+          <tr><th>班组长 / 调度</th><td>在甘特上微调日期、班次、责任人与具体机台；处理冲突与 busy 提示；进入试排、看影响、确认后发布。</td></tr>
+          <tr><th>现场班组</th><td>按工作日对工序开工 / 暂停 / 完工；提交日报与电子签名；反馈计划—实绩偏差。</td></tr>
+          <tr><th>生产主管</th><td>查看交期桶、人编缺口、冲突数、计划/实绩工时；关注今日 digest（请假等）与延误风险。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band" id="loop">
+    <div class="wrap">
+      <div class="sec-label">04 · 能力闭环</div>
+      <h2>基础数据 → 工单 → 甘特 → 报工，一条链跑通</h2>
+
+      <figure class="viz" aria-label="智排四段能力闭环示意图">
+        <div class="viz-title">图示 · 四段闭环（各段职责一句话）</div>
+        <svg viewBox="0 0 880 168" role="img" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8"/>
+            </marker>
+          </defs>
+          <!-- boxes -->
+          <rect x="16" y="28" width="180" height="88" rx="6" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+          <text x="106" y="58" text-anchor="middle" font-size="15" font-weight="700" fill="#0f766e" font-family="Noto Sans SC, sans-serif">① 基础数据</text>
+          <text x="106" y="80" text-anchor="middle" font-size="11" fill="#3d4f66" font-family="Noto Sans SC, sans-serif">班制·人·技能·设备池</text>
+          <text x="106" y="98" text-anchor="middle" font-size="11" fill="#3d4f66" font-family="Noto Sans SC, sans-serif">模板·排班周历</text>
+
+          <rect x="238" y="28" width="180" height="88" rx="6" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+          <text x="328" y="58" text-anchor="middle" font-size="15" font-weight="700" fill="#1e3a5f" font-family="Noto Sans SC, sans-serif">② 工单管理</text>
+          <text x="328" y="80" text-anchor="middle" font-size="11" fill="#3d4f66" font-family="Noto Sans SC, sans-serif">优先级·插单·返工</text>
+          <text x="328" y="98" text-anchor="middle" font-size="11" fill="#3d4f66" font-family="Noto Sans SC, sans-serif">按模板展开工序</text>
+
+          <rect x="460" y="28" width="180" height="88" rx="6" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+          <text x="550" y="58" text-anchor="middle" font-size="15" font-weight="700" fill="#1e3a5f" font-family="Noto Sans SC, sans-serif">③ 排产甘特</text>
+          <text x="550" y="80" text-anchor="middle" font-size="11" fill="#3d4f66" font-family="Noto Sans SC, sans-serif">落机·试排·冲突</text>
+          <text x="550" y="98" text-anchor="middle" font-size="11" fill="#3d4f66" font-family="Noto Sans SC, sans-serif">多策略重排</text>
+
+          <rect x="682" y="28" width="180" height="88" rx="6" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+          <text x="772" y="58" text-anchor="middle" font-size="15" font-weight="700" fill="#1e3a5f" font-family="Noto Sans SC, sans-serif">④ 工序报工</text>
+          <text x="772" y="80" text-anchor="middle" font-size="11" fill="#3d4f66" font-family="Noto Sans SC, sans-serif">开停完·签名</text>
+          <text x="772" y="98" text-anchor="middle" font-size="11" fill="#3d4f66" font-family="Noto Sans SC, sans-serif">偏差处置</text>
+
+          <line x1="196" y1="72" x2="232" y2="72" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+          <line x1="418" y1="72" x2="454" y2="72" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+          <line x1="640" y1="72" x2="676" y2="72" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- feedback -->
+          <path d="M772 126 C 500 158, 380 158, 106 126" fill="none" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text x="440" y="158" text-anchor="middle" font-size="11" fill="#0f766e" font-family="Noto Sans SC, sans-serif">实绩与偏差回馈计划可信度</text>
+        </svg>
+        <p class="viz-caption">不是四张孤立菜单，而是「主数据可排 → 工单可展 → 计划可调 → 现场可报」的闭环；虚线表示报工反哺计划是否可信。</p>
+      </figure>
+
+      <div class="panel">
+        <h3>四段各自管什么</h3>
+        <ul class="bullet">
+          <li><b>基础数据</b>：班制（版本/生效/跨午夜）、班组、技能字典、计划侧设备台账、人员（技能与可上班次）、工序模板（标准工时、前置、设备池）、排班周历（生成、轮倒、请假替班、排班分析）。</li>
+          <li><b>工单管理</b>：客户订单或内部生产；优先级（含紧急插队）；类型含正常 / 返工 / 增补工序 / 返修；按模板展开工序规格后进入甘特。</li>
+          <li><b>排产甘特</b>：订单—工序视图；拖拽编辑；自动排产与多策略重排；试排沙箱；冲突与负荷提示；设备自动落机。</li>
+          <li><b>工序报工</b>：工作日视图；开工暂停完工；日报与签名；偏差处置（独立权限）。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="layers">
+    <div class="wrap">
+      <div class="sec-label">05 · 核心差异：人机分层</div>
+      <h2>周历管人，模板管池，甘特落机 —— 绝不混在一张表里硬排</h2>
+      <div class="prose">
+        <p>这是智排相对「Excel 一张总表」和「黑盒排程」最关键的产品原则：每一层职责清晰，冲突才判得准，现场才调得动。</p>
+      </div>
+
+      <figure class="viz" aria-label="人机四层分层示意图">
+        <div class="viz-title">图示 · 四层分工（管什么 / 不管什么）</div>
+        <svg viewBox="0 0 880 320" role="img" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans SC, sans-serif">
+          <!-- left stack -->
+          <text x="20" y="24" font-size="12" font-weight="700" fill="#0f766e">计划侧分层（自上而下落地）</text>
+
+          <rect x="20" y="40" width="420" height="56" rx="5" fill="#eef2f6" stroke="#94a3b8"/>
+          <text x="36" y="64" font-size="14" font-weight="700" fill="#1e3a5f">① 排班周历</text>
+          <text x="36" y="84" font-size="12" fill="#3d4f66">管：人是否到岗（白/中/夜、请假、替班）</text>
+          <text x="300" y="74" font-size="11" fill="#b45309">✗ 不指定机台</text>
+
+          <rect x="20" y="108" width="420" height="56" rx="5" fill="#ecfdf8" stroke="#0f766e"/>
+          <text x="36" y="132" font-size="14" font-weight="700" fill="#0f766e">② 工序模板</text>
+          <text x="36" y="152" font-size="12" fill="#3d4f66">管：技能要求 + 可用设备池</text>
+          <text x="300" y="142" font-size="11" fill="#b45309">✗ 不锁死某一台</text>
+
+          <rect x="20" y="176" width="420" height="56" rx="5" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+          <text x="36" y="200" font-size="14" font-weight="700" fill="#0f766e">③ 甘特排产</text>
+          <text x="36" y="220" font-size="12" fill="#3d4f66">管：日期、班次、责任人、具体机台</text>
+          <text x="300" y="210" font-size="11" fill="#0f766e">✓ 落机落人</text>
+
+          <rect x="20" y="244" width="420" height="56" rx="5" fill="#fff7ed" stroke="#b45309"/>
+          <text x="36" y="268" font-size="14" font-weight="700" fill="#b45309">④ 冲突引擎</text>
+          <text x="36" y="288" font-size="12" fill="#3d4f66">管：重叠上的人/机互斥与班次负荷</text>
+          <text x="280" y="278" font-size="11" fill="#b45309">✗ 同班多单≠一律硬红</text>
+
+          <!-- arrows between -->
+          <line x1="230" y1="96" x2="230" y2="108" stroke="#94a3b8" stroke-width="2"/>
+          <line x1="230" y1="164" x2="230" y2="176" stroke="#94a3b8" stroke-width="2"/>
+          <line x1="230" y1="232" x2="230" y2="244" stroke="#94a3b8" stroke-width="2"/>
+
+          <!-- right compare -->
+          <text x="480" y="24" font-size="12" font-weight="700" fill="#1e3a5f">对比：混排一张表会怎样</text>
+          <rect x="480" y="40" width="380" height="260" rx="6" fill="#fff" stroke="#d5dde8"/>
+          <text x="500" y="72" font-size="13" font-weight="700" fill="#1e3a5f">常见混排</text>
+          <text x="500" y="98" font-size="12" fill="#3d4f66">· 周历里既排人又排机</text>
+          <text x="500" y="120" font-size="12" fill="#3d4f66">· 模板阶段锁死机台</text>
+          <text x="500" y="142" font-size="12" fill="#3d4f66">· 冲突一刀切全红或全不管</text>
+          <text x="500" y="164" font-size="12" fill="#3d4f66">· 多机班组被班组互斥误杀</text>
+
+          <line x1="500" y1="184" x2="840" y2="184" stroke="#e2e8f0"/>
+
+          <text x="500" y="214" font-size="13" font-weight="700" fill="#0f766e">智排分层</text>
+          <text x="500" y="240" font-size="12" fill="#3d4f66">· 人到岗 / 机台占用拆开</text>
+          <text x="500" y="262" font-size="12" fill="#3d4f66">· 池内选机，甘特才落定</text>
+          <text x="500" y="284" font-size="12" fill="#3d4f66">· 冲突按物理与负荷分档</text>
+        </svg>
+        <p class="viz-caption">销售一句话：周历回答「谁来」，模板回答「能用哪些机」，甘特回答「用哪一台」，冲突引擎回答「这样排能不能干」。 </p>
+      </figure>
+
+      <table class="layer-table">
+        <thead>
+          <tr><th>层级</th><th>管什么</th><th>明确不管什么</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><b>排班周历</b></td><td>人是否到岗（白/中/夜、请假、替班）</td><td>不在周历里指定机台</td></tr>
+          <tr><td><b>工序模板</b></td><td>技能要求 + 可用设备池</td><td>不在模板阶段锁死某一台</td></tr>
+          <tr><td><b>甘特排产</b></td><td>日期、班次、责任人、具体机台</td><td>—</td></tr>
+          <tr><td><b>冲突引擎</b></td><td>时间重叠上的人/机互斥与班次负荷</td><td>不把「同班多单」一律当硬冲突</td></tr>
+        </tbody>
+      </table>
+      <div class="panel">
+        <h3>建厂建议顺序</h3>
+        <p class="muted" style="margin:0">班制 → 班组 → 技能 → 设备 → 人员 → 工序模板 → 排班。顺序错了，后面甘特与冲突会反复返工。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="conflict">
+    <div class="wrap">
+      <div class="sec-label">06 · 冲突引擎（贴近车间）</div>
+      <h2>该红的红，该黄的黄 —— 系统才有人用</h2>
+
+      <figure class="viz" aria-label="冲突分档决策示意图">
+        <div class="viz-title">图示 · 冲突如何分档（决策路径）</div>
+        <svg viewBox="0 0 880 300" role="img" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans SC, sans-serif">
+          <defs>
+            <marker id="arr2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0 L7,3.5 L0,7 Z" fill="#64748b"/>
+            </marker>
+          </defs>
+          <!-- start -->
+          <rect x="340" y="12" width="200" height="40" rx="5" fill="#1e3a5f"/>
+          <text x="440" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">两道工序比较</text>
+
+          <line x1="440" y1="52" x2="440" y2="72" stroke="#64748b" stroke-width="2" marker-end="url(#arr2)"/>
+
+          <rect x="300" y="72" width="280" height="40" rx="5" fill="#fff" stroke="#94a3b8"/>
+          <text x="440" y="97" text-anchor="middle" font-size="12" fill="#14233a">日期区间 ∩ 且 班次/时段重叠？</text>
+
+          <!-- no branch -->
+          <path d="M300 92 H 120 V 120" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arr2)"/>
+          <text x="200" y="86" font-size="11" fill="#64748b">否</text>
+          <rect x="40" y="120" width="160" height="44" rx="5" fill="#f0fdfa" stroke="#0f766e"/>
+          <text x="120" y="147" text-anchor="middle" font-size="12" font-weight="700" fill="#0f766e">不构成时间冲突</text>
+
+          <!-- yes -->
+          <line x1="440" y1="112" x2="440" y2="132" stroke="#64748b" stroke-width="2" marker-end="url(#arr2)"/>
+          <text x="452" y="128" font-size="11" fill="#64748b">是</text>
+
+          <rect x="300" y="132" width="280" height="40" rx="5" fill="#fff" stroke="#94a3b8"/>
+          <text x="440" y="157" text-anchor="middle" font-size="12" fill="#14233a">同设备 · 责任人是否可证明串行？</text>
+
+          <!-- hard conflict -->
+          <path d="M300 152 H 120 V 200" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arr2)"/>
+          <text x="190" y="146" font-size="11" fill="#b45309">否·抢机/无法串行</text>
+          <rect x="40" y="200" width="160" height="56" rx="5" fill="#fef2f2" stroke="#b91c1c" stroke-width="2"/>
+          <text x="120" y="224" text-anchor="middle" font-size="13" font-weight="700" fill="#b91c1c">硬冲突</text>
+          <text x="120" y="244" text-anchor="middle" font-size="11" fill="#7f1d1d">标红 · 发布可感知</text>
+
+          <!-- serial overload path -->
+          <path d="M580 152 H 760 V 200" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arr2)"/>
+          <text x="640" y="146" font-size="11" fill="#0f766e">是·同人串行</text>
+          <rect x="680" y="200" width="160" height="40" rx="5" fill="#fff" stroke="#94a3b8"/>
+          <text x="760" y="225" text-anchor="middle" font-size="12" fill="#14233a">累加工时 &gt; 班次？</text>
+
+          <path d="M680 220 H 560 V 260" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arr2)"/>
+          <text x="620" y="214" font-size="11" fill="#b45309">是</text>
+          <rect x="480" y="248" width="140" height="40" rx="5" fill="#fffbeb" stroke="#b45309" stroke-width="2"/>
+          <text x="550" y="273" text-anchor="middle" font-size="12" font-weight="700" fill="#b45309">超载告警</text>
+
+          <path d="M840 220 H 860 V 260 H 780" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arr2)"/>
+          <text x="848" y="248" font-size="11" fill="#0f766e">否</text>
+          <rect x="700" y="248" width="140" height="40" rx="5" fill="#f0fdfa" stroke="#0f766e"/>
+          <text x="770" y="273" text-anchor="middle" font-size="12" font-weight="700" fill="#0f766e">允许串行</text>
+        </svg>
+        <p class="viz-caption">核心差异：不是「重叠就红灯」。先看时间是否真重叠，再看是抢机还是同人串行；串行只在超班次工时时给黄灯告警，允许继续调。</p>
+      </figure>
+
+      <div class="viz-row">
+        <div class="grid-2" style="margin:0">
+          <div class="panel" style="margin:0">
+            <h3>硬冲突（物理不可并行）</h3>
+            <ul class="bullet">
+              <li>同机、日期与班次重叠，且责任人集合不相交（两人抢一机）</li>
+              <li>或无法证明可串行的同机重叠</li>
+              <li>发布与 digest 可感知，计划不可「假装没有」</li>
+            </ul>
+          </div>
+          <div class="panel" style="margin:0">
+            <h3>超载告警（允许保存）</h3>
+            <ul class="bullet">
+              <li>同人同机同班多单默认按串行理解</li>
+              <li>按日累加 <b>hours_per_day</b> 超过标准班次可用工时 → overload</li>
+              <li>告警但不卡死，符合「同班赶几单」的现实</li>
+            </ul>
+          </div>
+        </div>
+        <figure class="viz" style="margin:0" aria-label="焊机争用对照示意">
+          <div class="viz-title">场景速览 · 同一焊机同一班</div>
+          <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans SC, sans-serif">
+            <rect x="20" y="20" width="130" height="70" rx="5" fill="#fef2f2" stroke="#b91c1c"/>
+            <text x="85" y="48" text-anchor="middle" font-size="12" font-weight="700" fill="#b91c1c">甲 + 乙</text>
+            <text x="85" y="68" text-anchor="middle" font-size="11" fill="#7f1d1d">两人抢一机</text>
+            <text x="85" y="110" text-anchor="middle" font-size="11" font-weight="700" fill="#b91c1c">→ 硬冲突</text>
+
+            <rect x="170" y="20" width="130" height="70" rx="5" fill="#fffbeb" stroke="#b45309"/>
+            <text x="235" y="48" text-anchor="middle" font-size="12" font-weight="700" fill="#b45309">甲 + 甲</text>
+            <text x="235" y="68" text-anchor="middle" font-size="11" fill="#92400e">同人赶两单</text>
+            <text x="235" y="110" text-anchor="middle" font-size="11" font-weight="700" fill="#b45309">→ 串行 / 或超载</text>
+
+            <rect x="40" y="140" width="240" height="40" rx="5" fill="#f8fafc" stroke="#d5dde8"/>
+            <text x="160" y="165" text-anchor="middle" font-size="11" fill="#3d4f66">规则贴近老师傅常识，系统才有人用</text>
+          </svg>
+        </figure>
+      </div>
+
+      <div class="panel">
+        <h3>其他风险分档</h3>
+        <ul class="bullet">
+          <li>请假仍派工、缺编、技能不符、延期等分档提示，避免「一律红灯」或「一律不管」。</li>
+          <li>已选定具体设备时，<b>不以班组互斥误杀</b>多机班组的合理并行——以设备为准，而不是粗暴按班组锁死。</li>
+          <li>时间重叠判定同时看：计划日期闭区间交集 + 班次/时段重叠（白/中/夜默认不重叠）。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="plan">
+    <div class="wrap">
+      <div class="sec-label">07 · 计划侧智能</div>
+      <h2>自动排、敢重排、能试排、可冻结</h2>
+
+      <figure class="viz" aria-label="试排沙箱状态机示意图">
+        <div class="viz-title">图示 · 试排沙箱（插单会议可「先试再定」）</div>
+        <svg viewBox="0 0 880 200" role="img" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans SC, sans-serif">
+          <defs>
+            <marker id="arr3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0 L7,3.5 L0,7 Z" fill="#64748b"/>
+            </marker>
+          </defs>
+          <rect x="40" y="70" width="140" height="52" rx="6" fill="#eef2f6" stroke="#94a3b8"/>
+          <text x="110" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a5f">已发布计划</text>
+
+          <line x1="180" y1="96" x2="230" y2="96" stroke="#64748b" stroke-width="2" marker-end="url(#arr3)"/>
+          <text x="205" y="88" text-anchor="middle" font-size="11" fill="#0f766e">进入试排</text>
+
+          <rect x="230" y="60" width="160" height="72" rx="6" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+          <text x="310" y="90" text-anchor="middle" font-size="13" font-weight="700" fill="#0f766e">试排沙箱</text>
+          <text x="310" y="110" text-anchor="middle" font-size="11" fill="#3d4f66">拖拽 / 重排 / 换机</text>
+
+          <line x1="390" y1="96" x2="440" y2="96" stroke="#64748b" stroke-width="2" marker-end="url(#arr3)"/>
+          <text x="415" y="88" text-anchor="middle" font-size="11" fill="#64748b">影响预览</text>
+
+          <rect x="440" y="60" width="160" height="72" rx="6" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+          <text x="520" y="90" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a5f">影响预览</text>
+          <text x="520" y="110" text-anchor="middle" font-size="11" fill="#3d4f66">交期 / 冲突变化</text>
+
+          <!-- publish -->
+          <path d="M600 80 H 660 V 48 H 720" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#arr3)"/>
+          <text x="655" y="44" font-size="11" fill="#0f766e">发布</text>
+          <rect x="720" y="28" width="120" height="44" rx="6" fill="#ecfdf8" stroke="#0f766e" stroke-width="2"/>
+          <text x="780" y="55" text-anchor="middle" font-size="13" font-weight="700" fill="#0f766e">新发布计划</text>
+
+          <!-- abandon -->
+          <path d="M600 112 H 660 V 150 H 720" fill="none" stroke="#b45309" stroke-width="2" marker-end="url(#arr3)"/>
+          <text x="655" y="168" font-size="11" fill="#b45309">放弃</text>
+          <rect x="720" y="128" width="120" height="44" rx="6" fill="#fff7ed" stroke="#b45309"/>
+          <text x="780" y="155" text-anchor="middle" font-size="12" font-weight="700" fill="#b45309">回到发布前</text>
+
+          <text x="40" y="180" font-size="12" fill="#3d4f66">今天以前可冻结：重排打不乱已执行历史 · 设备池可自动选当日班次负荷最低机台</text>
+        </svg>
+        <p class="viz-caption">相对「改完难回退」的排程：试排把实验和生产真相隔开；会议里先看后果，再决定发布或放弃。</p>
+      </figure>
+
+      <ul class="bullet">
+        <li><b>多策略重排</b>：保交期、级别优先、交期优先等；范围可限当前甘特或全部未完成。</li>
+        <li><b>试排沙箱</b>：进入试排 → 移动/重排影响预览 → 发布或放弃。插单会议里可以「先试再定」。</li>
+        <li><b>设备自动落机</b>：工序带设备池且未选手动时，可按当日该班次负荷最低的启用设备自动选机。</li>
+        <li><b>历史冻结</b>：今天以前可冻结，避免重排把已执行计划打乱。</li>
+        <li><b>停用与引用约束</b>：停用设备不可新占；删除设备须先清空/迁移工序引用，保证主数据干净。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="band" id="shopfloor">
+    <div class="wrap">
+      <div class="sec-label">08 · 现场闭环</div>
+      <h2>报工不是附属功能，是计划是否可信的前提</h2>
+      <div class="grid-2">
+        <div class="card"><strong>过程可记</strong><p>按工作日报工：开工 / 暂停 / 完工，状态清楚。</p></div>
+        <div class="card"><strong>责任可追</strong><p>日报与电子签名，谁报的、何时报的可追溯。</p></div>
+        <div class="card"><strong>偏差可处置</strong><p>计划—实绩偏差独立权限处置，形成改进输入。</p></div>
+        <div class="card"><strong>主管可看见</strong><p>订单汇总：交期桶、人编缺口、冲突、计划/实绩工时。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="scenes">
+    <div class="wrap">
+      <div class="sec-label">09 · 典型业务场景</div>
+      <h2>销售与实施可直接对照客户故事</h2>
+      <div class="scenario">
+        <div class="n">场景 A</div>
+        <h4>紧急插单，又不想把整周计划改崩</h4>
+        <p>客户加急单插入高优先级。计划员进入试排，按「级别优先」重排未完成工序，查看对既有交期的影响预览；班组长确认机台与责任人后发布。放弃则回到发布前状态。</p>
+        <div class="out"><b>结果：</b>插单有路径、有后果、可回退，会议能拍板。</div>
+      </div>
+      <div class="scenario">
+        <div class="n">场景 B</div>
+        <h4>焊机争用：两人抢一机 vs 同人串行多单</h4>
+        <p>两道焊接工序落在同一焊机同一班次。若责任人不同 → 硬冲突标红；若同一人赶两单 → 按串行累加工时，超班则 overload 告警，允许继续调日期或换池内其他焊机。</p>
+        <div class="out"><b>结果：</b>系统规则与老师傅常识一致，不会被弃用。</div>
+      </div>
+      <div class="scenario">
+        <div class="n">场景 C</div>
+        <h4>请假替班后，计划自动暴露风险</h4>
+        <p>排班周历登记请假；甘特上仍派该人 → leave/staffing 类风险可见；调度改派有技能且当班的人，或调整班次。</p>
+        <div class="out"><b>结果：</b>人的到岗与工序派工对齐，减少开班才发现缺人。</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="diff">
+    <div class="wrap">
+      <div class="sec-label">10 · 与常见做法的差异</div>
+      <h2>不是「又一个排程」，而是车间可执行的计划系统</h2>
+      <table class="compare">
+        <thead>
+          <tr><th>维度</th><th>Excel / 口头调度</th><th>通用排程套件</th><th>智排</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>人机关系</td><td>混在一张表</td><td>常偏算法黑盒</td><td class="ours">人—技能设备池—落机分层</td></tr>
+          <tr><td>冲突</td><td>事后发现</td><td>易一刀切卡死</td><td class="ours">硬冲突 / 超载分档</td></tr>
+          <tr><td>插单</td><td>全表重算</td><td>改完难回退</td><td class="ours">试排 + 预览 + 发布</td></tr>
+          <tr><td>现场</td><td>另找工具</td><td>常弱</td><td class="ours">报工签字 + 偏差同体系</td></tr>
+          <tr><td>上线门槛</td><td>低但不可扩展</td><td>高、要改习惯</td><td class="ours">可单买、规则贴近现场</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="fit">
+    <div class="wrap">
+      <div class="sec-label">11 · 适用企业自检</div>
+      <h2>符合越多，智排越「立刻有感」</h2>
+      <ul class="check-list">
+        <li>三班倒或多班制，请假、替班频繁</li>
+        <li>关键设备（焊机、机加、注塑等）争用明显，存在设备池概念</li>
+        <li>插单、返工、返修多，交期压力大</li>
+        <li>计划与现场之间需要可追溯的报工与偏差闭环</li>
+        <li>希望先管交期与争用，设备健康可后续再上工诊</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="band" id="combo">
+    <div class="wrap">
+      <div class="sec-label">12 · 合买协同</div>
+      <h2>边界清晰：智排管计划占用，不把诊断塞进甘特</h2>
+      <div class="combo">
+        <p style="margin:0 0 10px"><b>智排 × 工诊</b>：设备编码映射后，高风险机避免仍被高负荷占用；维修窗口对照交期与班次。</p>
+        <p style="margin:0 0 10px"><b>智排 × 智检</b>：质检放行 / 返工结果回到工单与重排，质量不再游离在计划外。</p>
+        <p style="margin:0"><b>智排 × 智规</b>：开班、换型等规范与派工/班次绑定，标准动作进现场。</p>
+      </div>
+      <div class="btn-row no-print">
+        <a class="btn btn-primary" href="../index.html">返回平台总册</a>
+        <a class="btn btn-ghost" href="gongzhen.html">下一模块：工诊</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="big">合同物料名：智能排产模块（智排）</div>
+      <p>元启·工小智 · 可分可合 · 单册 v0.4（信息图样板）· 与平台总册口径一致</p>
+    </div>
+  </footer>
+</body>
+</html>

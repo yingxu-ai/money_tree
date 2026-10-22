@@ -3,6 +3,7 @@ import type { ApiResponse } from "@/types";
 import { ApiError } from "@/api/errors";
 import { ErrorCode } from "@/config/errorCodes";
 import { clearTokens, getAccessToken } from "@/utils/tokenStorage";
+import { getOperatingTenantId } from "@/utils/operatingTenantStorage";
 
 const http = axios.create({
   baseURL: "/api/v1",
@@ -26,6 +27,10 @@ http.interceptors.request.use((config) => {
   }
   const traceId = crypto.randomUUID?.().replace(/-/g, "") ?? String(Date.now());
   config.headers["X-Trace-Id"] = traceId;
+  const opTenant = getOperatingTenantId();
+  if (opTenant != null) {
+    config.headers["X-Operating-Tenant-Id"] = String(opTenant);
+  }
   return config;
 });
 
@@ -80,8 +85,8 @@ export async function putData<T>(url: string, data?: unknown): Promise<T> {
   return res.data.data as T;
 }
 
-export async function deleteData<T>(url: string): Promise<T> {
-  const res = await http.delete<ApiResponse<T>>(url);
+export async function deleteData<T>(url: string, params?: Record<string, unknown>): Promise<T> {
+  const res = await http.delete<ApiResponse<T>>(url, { params });
   return res.data.data as T;
 }
 

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>工诊 · 设备健康分析模块 — 元启·工小智</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="_shared.css" />
+  <style>.hero-bg { --hero-img: url("assets/gongxiaozhi-cover.jpg"); }</style>
+</head>
+<body>
+  <div class="topbar no-print">
+    <div class="topbar-inner">
+      <a class="logo" href="../index.html">元启·工小智 <span>工诊</span></a>
+      <nav class="nav">
+        <a href="zhipai.html">智排</a>
+        <a class="on" href="gongzhen.html">工诊</a>
+        <a href="zhijian.html">智检</a>
+        <a href="zhifang.html">智方</a>
+        <a href="zhiyi.html">智艺</a>
+        <a href="zhigui.html">智规</a>
+      </nav>
+      <button class="btn btn-ghost" type="button" onclick="window.print()">打印 / PDF</button>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-content">
+      <div class="eyebrow">元启·工小智 · 能力域单册</div>
+      <h1>工诊 <span class="tag">可售</span></h1>
+      <p class="lead">设备健康分析模块 — 先看清坏在哪，再看会不会坏，最后在安全边界内把设备用好。覆盖生产机台与动力公用设备（空压、泵、冷水机组等场景），把告警台升级为可解释的诊断与约束优化。</p>
+      <div class="hero-meta">
+        <span>合同物料：设备健康分析模块（工诊）</span>
+        <span>可独立采购 · 可与智排 / 智艺等合买</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="no-print" style="padding-top:28px;padding-bottom:0">
+    <div class="wrap">
+      <nav class="toc">
+        <a href="#pain">痛点场景</a>
+        <a href="#value">交付价值</a>
+        <a href="#roles">角色与动作</a>
+        <a href="#loop">能力闭环</a>
+        <a href="#fleet">机队视角</a>
+        <a href="#device">单机深潜</a>
+        <a href="#optimize">约束优化</a>
+        <a href="#scenes">典型场景</a>
+        <a href="#diff">差异对比</a>
+        <a href="#fit">适用自检</a>
+        <a href="#combo">合买协同</a>
+      </nav>
+    </div>
+  </section>
+
+  <section id="pain">
+    <div class="wrap">
+      <div class="sec-label">01 · 为什么需要工诊</div>
+      <h2>工厂不缺测点，缺的是「证据 → 结论 → 动作」</h2>
+      <div class="prose">
+        <p>SCADA 与告警台能告诉你「超限了」，却很难说清：是哪一类故障、证据是否一致、会不会继续恶化、该先修还是先调参、备件与工单怎么准备。BI 看板好看，但往往事后统计，撑不起当班决策。</p>
+        <p>工诊把设备能力做成一条完整链路：采集配置 → 机队总览 → 分析诊断 → 单机证据链 → 未来风险 → 带约束的运行优化。</p>
+      </div>
+      <div class="grid-2">
+        <div class="card pain"><strong>坏了才知道</strong><p>非计划停机打乱交期，备件被动采购，产能承诺失信。</p><p class="sub">需要：未来风险与 RUL 分口径可见。</p></div>
+        <div class="card pain"><strong>告警噪声大</strong><p>红黄绿刷屏，值班人员疲劳；真正危险被淹没。</p><p class="sub">需要：结论 + 证据 + 原因概率，而不是堆测点。</p></div>
+        <div class="card pain"><strong>优化建议不敢用</strong><p>节能/提负荷建议与报警并存，怕越调越糟。</p><p class="sub">需要：异常未关闭时阻断激进调优。</p></div>
+        <div class="card pain"><strong>机队看不清</strong><p>多车间多类型设备，列表扁平，主管无法先圈范围再下钻。</p><p class="sub">需要：与组织树同源的机队视角。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="value">
+    <div class="wrap">
+      <div class="sec-label">02 · 单买即可交付的价值</div>
+      <h2>不依赖智排，也能独立建成健康闭环</h2>
+      <div class="grid-3">
+        <div class="card"><strong>可解释</strong><p>对照分析给出结论、证据、原因概率与处置步骤。</p></div>
+        <div class="card"><strong>可分口径</strong><p>现状健康与未来风险同屏，但不混读成一个灯。</p></div>
+        <div class="card"><strong>可约束优化</strong><p>先处置异常，再谈节能与负荷，避免假优化。</p></div>
+      </div>
+      <div class="panel">
+        <p class="muted" style="margin:0">与工厂组织树同源过滤，适合多车间 / 多工厂按部门范围看机队，而不是静态演示列表。采集侧支持数据源与测点分类（PLC 工况、电气、环境等）及设备—测点绑定。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="roles">
+    <div class="wrap">
+      <div class="sec-label">03 · 谁在用</div>
+      <h2>从采集配置到当班处置，角色清晰</h2>
+      <table class="role-table">
+        <thead><tr><th>角色</th><th>典型动作</th></tr></thead>
+        <tbody>
+          <tr><th>设备 / 维修工程师</th><td>诊断总览筛选异常与事件；进入单机对照分析；按处置步骤闭环；查看预案与备件提示。</td></tr>
+          <tr><th>能源 / 运行岗</th><td>在设备状态允许时查看运行优化场景（节能、平衡、高负荷、长寿命）；检查约束是否满足。</td></tr>
+          <tr><th>车间 / 设备主管</th><td>按部门与类型看机队 KPI、健康分布与未来风险；设备对比与趋势；安排维修窗口优先级。</td></tr>
+          <tr><th>信息化 / 采集配置</th><td>维护数据源、测点分类与设备绑定；按组织树控制可见范围。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band" id="loop">
+    <div class="wrap">
+      <div class="sec-label">04 · 能力闭环</div>
+      <h2>采集 → 机队 → 诊断 → 预测 / 优化</h2>
+      <div class="flow">
+        <span>采集配置</span><i>→</i>
+        <span>设备列表 / 机队</span><i>→</i>
+        <span>分析诊断总览</span><i>→</i>
+        <span>单机深潜</span><i>→</i>
+        <span>预测 / 优化</span>
+      </div>
+      <div class="panel">
+        <ul class="bullet">
+          <li><b>采集配置</b>：数据源与测点分类；设备—测点绑定；部门树筛选。</li>
+          <li><b>设备列表</b>：KPI、检索与状态筛选；机队图表（运行状态趋势、类型趋势、组织分布等）。</li>
+          <li><b>分析诊断总览</b>：按部门 / 类型 / 运行或在线状态 / 时间口径（本班、24h、7d 等）聚合；事件队列。</li>
+          <li><b>单机</b>：总览、对照分析、未来、指标预测、健康示意、运行优化、对比入口。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="fleet">
+    <div class="wrap">
+      <div class="sec-label">05 · 机队视角</div>
+      <h2>先圈范围，再下钻 —— 主管与工程师共用一张图</h2>
+      <ul class="bullet">
+        <li>KPI：总数、在线、异常与关注、<b>未来风险</b>、待处理事件。</li>
+        <li><b>现状健康分布</b>与 <b>未来风险</b> 同屏展示、分口径阅读——避免揉成一个「红黄绿」糊弄决策。</li>
+        <li>趋势、类型分布、组织分布等图表服务「哪里先看」；事件流服务「今天先处理什么」。</li>
+        <li>设备对比：多设备、多周期横向对照（含状态泳道），适合同型机或跨班组对比。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="band" id="device">
+    <div class="wrap">
+      <div class="sec-label">06 · 单机深潜（证据链）</div>
+      <h2>输出不是告警列表，而是可开会的结论包</h2>
+      <div class="grid-2">
+        <div class="panel" style="margin:0">
+          <h3>对照分析</h3>
+          <ul class="bullet">
+            <li>结论与证据链</li>
+            <li>原因概率与恶化情景</li>
+            <li>趋势、测点带、多源一致</li>
+            <li>同业 / 同型对比</li>
+            <li>处置步骤可执行</li>
+          </ul>
+        </div>
+        <div class="panel" style="margin:0">
+          <h3>未来与示意</h3>
+          <ul class="bullet">
+            <li>多时间窗风险（如 24h / 72h / 7d）</li>
+            <li>RUL 及置信；故障类型概率</li>
+            <li>预案 / 备件 / 工单提示</li>
+            <li>离线则预测暂停，避免假精确</li>
+            <li>健康示意热区，便于沟通培训</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="optimize">
+    <div class="wrap">
+      <div class="sec-label">07 · 运行优化（带约束）</div>
+      <h2>先安全与稳定，再谈节能与负荷</h2>
+      <div class="prose">
+        <p>优化场景包括节能、平衡、高负荷、长寿命等，并检查设备当前状态约束。<strong>报警未关闭时可阻断激进调优</strong>——这是工诊与「只出建议不管后果」的工具的关键差异。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="scenes">
+    <div class="wrap">
+      <div class="sec-label">08 · 典型业务场景</div>
+      <h2>从当班异常到维修计划</h2>
+      <div class="scenario">
+        <div class="n">场景 A</div>
+        <h4>空压站异响 / 振动异常，值班不知是否停机</h4>
+        <p>总览圈定动力车间异常设备 → 进入单机对照分析，查看证据与原因概率 → 按处置步骤先降负荷或安排点检 → 同步看 72h 风险是否上升。</p>
+        <div class="out"><b>结果：</b>当班有结论、有步骤，而不是只盯着一条报警。</div>
+      </div>
+      <div class="scenario">
+        <div class="n">场景 B</div>
+        <h4>同型注塑机对比：哪台该优先保养</h4>
+        <p>设备对比选同型机与周期 → 健康与风险分口径排序 → 结合 RUL / 事件积压安排保养窗口。</p>
+        <div class="out"><b>结果：</b>保养从「轮流做」变成「风险优先」。</div>
+      </div>
+      <div class="scenario">
+        <div class="n">场景 C</div>
+        <h4>想节能调参，但设备仍有未关闭报警</h4>
+        <p>优化面板检查约束 → 激进调优被阻断 → 先关闭/处置报警事件 → 再给出节能或平衡建议。</p>
+        <div class="out"><b>结果：</b>避免「带病优化」造成二次故障。</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="diff">
+    <div class="wrap">
+      <div class="sec-label">09 · 与常见做法的差异</div>
+      <h2>从「看见超限」到「能决策」</h2>
+      <table class="compare">
+        <thead>
+          <tr><th>维度</th><th>纯 SCADA / 告警台</th><th>通用 BI 看板</th><th>工诊</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>输出</td><td>阈值超限</td><td>指标好看</td><td class="ours">证据 → 对照 → 处置</td></tr>
+          <tr><td>时间</td><td>多为现状</td><td>事后统计</td><td class="ours">现状与未来分口径</td></tr>
+          <tr><td>优化</td><td>少或无约束</td><td>难落地</td><td class="ours">带状态约束调优</td></tr>
+          <tr><td>组织</td><td>点位扁平</td><td>报表割裂</td><td class="ours">机队范围 + 单机钻取</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band" id="fit">
+    <div class="wrap">
+      <div class="sec-label">10 · 适用企业自检</div>
+      <ul class="check-list">
+        <li>关键设备停机损失高，备件与维修偏被动</li>
+        <li>动力站与产线设备并存，需要机队级视野</li>
+        <li>已有或计划接入 PLC / 电气 / 环境等测点</li>
+        <li>希望从「看报警」升级到「可解释诊断 + 可约束优化」</li>
+        <li>多车间 / 多工厂，需要按组织范围授权查看</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="combo">
+    <div class="wrap">
+      <div class="sec-label">11 · 合买协同</div>
+      <h2>与智排对齐编码，不把算法塞进甘特</h2>
+      <div class="combo">
+        <p style="margin:0 0 10px"><b>工诊 × 智排</b>：计划机台 ↔ 现场机台编码映射；敢排敢养，交期会议与维修会议同一套事实。</p>
+        <p style="margin:0 0 10px"><b>工诊 × 智艺</b>：工艺偏移 vs 设备劣化联合归因，少误判。</p>
+        <p style="margin:0"><b>工诊 × 智规</b>：点检 / 保养规范与健康事件闭环。</p>
+      </div>
+      <div class="btn-row no-print">
+        <a class="btn btn-primary" href="../index.html">返回平台总册</a>
+        <a class="btn btn-ghost" href="zhijian.html">下一模块：智检</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="big">合同物料名：设备健康分析模块（工诊）</div>
+      <p>元启·工小智 · 可分可合 · 单册 v0.3</p>
+    </div>
+  </footer>
+</body>
+</html>

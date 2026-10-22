@@ -10,9 +10,9 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 cd /d "%~dp0backend"
-echo [backend] 启动 uvicorn http://127.0.0.1:8000
-echo [backend] API 文档: http://127.0.0.1:8000/docs
+echo [backend] 启动 uvicorn http://127.0.0.1:8001
+echo [backend] API 文档: http://127.0.0.1:8001/docs
 echo.
 
-"%~dp0.venv\Scripts\python.exe" -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+"%~dp0.venv\Scripts\python.exe" -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 if errorlevel 1 pause

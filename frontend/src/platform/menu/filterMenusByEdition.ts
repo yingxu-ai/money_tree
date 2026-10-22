@@ -4,7 +4,8 @@ import type { MenuNode } from "@/types";
 
 /** 与 MANIFEST route_prefixes 对齐 */
 export const MODULE_ROUTE_PREFIXES: Record<ModuleId, string[]> = {
-  system: ["/system"],
+  // 平台专属；租户自管页见 TENANT_SELF_ADMIN_PREFIXES
+  system: ["/system/tenants", "/system/menus", "/system/api-permissions", "/system/audit"],
   dashboard: ["/dashboards", "/ai-assistant", "/configs", "/files"],
   demo: ["/demo"],
   "equipment-analysis": ["/devices", "/analysis"],
@@ -12,8 +13,19 @@ export const MODULE_ROUTE_PREFIXES: Record<ModuleId, string[]> = {
   toolbox: ["/tools"],
 };
 
+/** 任意客户租户都可进入的组织自管页（不按 SKU 裁剪） */
+const TENANT_SELF_ADMIN_PREFIXES = [
+  "/system/users",
+  "/system/roles",
+  "/system/depts",
+  "/system/dicts",
+];
+
 function pathAllowed(path: string | null | undefined, allowedPrefixes: string[]): boolean {
   if (!path) return true;
+  if (TENANT_SELF_ADMIN_PREFIXES.some((p) => path === p || path.startsWith(p + "/"))) {
+    return true;
+  }
   return allowedPrefixes.some((p) => path === p || path.startsWith(p + "/"));
 }
 

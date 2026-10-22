@@ -30,6 +30,8 @@ import { Button, Dropdown, Layout, Menu, Typography } from "antd";
 import type { MenuProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import DemoResetButton from "@/components/DemoResetButton";
+import OperatingTenantSwitcher from "@/components/OperatingTenantSwitcher";
 import LayoutSwitcher from "@/components/LayoutSwitcher";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import UserAvatar from "@/components/kit/UserAvatar";
@@ -158,8 +160,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   }, [navLayout]);
 
   const visibleMenus = useMemo(
-    () => filterMenusByAccess(menus, user?.enabled_modules),
-    [menus, user?.enabled_modules],
+    () =>
+      filterMenusByAccess(
+        menus,
+        // 平台运维始终看全量菜单；客户才按已购模块裁剪
+        user?.is_platform_admin ? null : user?.enabled_modules,
+      ),
+    [menus, user?.enabled_modules, user?.is_platform_admin],
   );
   const menuItems = useMemo(() => toMenuItems(visibleMenus), [visibleMenus]);
   const openKeys = useMemo(
@@ -219,6 +226,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   const accountActions = (
     <div className="app-header-right">
+      <OperatingTenantSwitcher />
+      <DemoResetButton />
       <ThemeSwitcher />
       <LayoutSwitcher />
       <Dropdown

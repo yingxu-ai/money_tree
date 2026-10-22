@@ -62,7 +62,8 @@ export default function ApiPermissionsPage() {
   const { mutate: doSync, loading: syncing } = useMutation(
     () => syncApiPermissions(),
     {
-      successMessage: (r) => `已同步，新增 ${r?.created ?? 0} 条（默认未启用）`,
+      successMessage: (r) =>
+        `已同步：新增 ${r?.created ?? 0}，更新 ${r?.updated ?? 0}（共扫描 ${r?.total_routes ?? 0} 条路由）`,
       onSuccess: async () => {
         await refresh();
         await refreshRoutes();
@@ -71,12 +72,7 @@ export default function ApiPermissionsPage() {
   );
 
   const { mutate: toggleEnabled, loading: toggling } = useMutation(
-    async (row: ApiPermissionRule) => {
-      if (!row.enabled && !row.permission_code) {
-        throw new Error("请先填写权限码再启用");
-      }
-      return updateApiPermission(row.id, { enabled: !row.enabled });
-    },
+    async (row: ApiPermissionRule) => updateApiPermission(row.id, { enabled: !row.enabled }),
     {
       successMessage: "状态已更新",
       onSuccess: async () => {
@@ -89,7 +85,7 @@ export default function ApiPermissionsPage() {
     <div>
       <PageHeader
         title="接口权限"
-        subtitle="方法 + 路径模板 → 权限码。启用后全局鉴权；新业务只配这里，不必每个接口再写 require_permission。"
+        subtitle="启动/点同步会按处理函数生成稳定 id；改展示名或路径只更新库记录，角色勾选不丢。启用后按规则 id 鉴权。"
         extra={
           <Space>
             <AuthButton permission="api_perm:manage" loading={syncing} onClick={() => void doSync()}>
@@ -101,7 +97,7 @@ export default function ApiPermissionsPage() {
               onClick={() => {
                 setEditing(null);
                 form.resetFields();
-                form.setFieldsValue({ method: "GET", enabled: false, sort: 0 });
+                form.setFieldsValue({ method: "GET", enabled: true, sort: 0 });
                 setOpen(true);
               }}
             >
@@ -115,6 +111,7 @@ export default function ApiPermissionsPage() {
         loading={loading || toggling}
         dataSource={rules}
         columns={[
+          { title: "ID", dataIndex: "id", width: 70 },
           {
             title: "方法",
             dataIndex: "method",
@@ -124,21 +121,24 @@ export default function ApiPermissionsPage() {
           { title: "路径模板", dataIndex: "path_pattern", ellipsis: true },
           { title: "名称", dataIndex: "name", width: 160, ellipsis: true },
           {
-            title: "权限码",
-            dataIndex: "permission_code",
-            width: 200,
-            render: (v) => v || <span style={{ color: "#a0aec0" }}>未配置</span>,
+            title: "稳定 Key",
+            dataIndex: "stable_key",
+            width: 220,
+            ellipsis: true,
+            render: (v) => v || <span style={{ color: "#a0aec0" }}>—</span>,
+          },
+          {
+            title: "菜单ID",
+            dataIndex: "menu_id",
+            width: 80,
+            render: (v) => v ?? "—",
           },
           {
             title: "启用",
             dataIndex: "enabled",
             width: 90,
             render: (v, row) => (
-              <Switch
-                checked={!!v}
-                onChange={() => void toggleEnabled(row)}
-                disabled={!row.permission_code && !v}
-              />
+              <Switch checked={!!v} onChange={() => void toggleEnabled(row)} />
             ),
           },
           {
@@ -214,17 +214,24 @@ export default function ApiPermissionsPage() {
               />
             </Form.Item>
           ) : null}
-          <Form.Item name="permission_code" label="权限码" rules={[{ required: true }]}>
+          <Form.Item
+            name="permission_code"
+            label="兼容权限码"
+            extra="可选。用于前端 AuthButton（如 user:create）；鉴权本身按规则 ID。"
+          >
             <Select
               showSearch
               allowClear
               optionFilterProp="label"
               options={permOptions}
-              placeholder="选择或先在角色权限里维护权限码"
+              placeholder="可选"
             />
           </Form.Item>
           <Form.Item name="name" label="名称">
-            <Input placeholder="便于识别" />
+            <Input placeholder="改名不影响身份；角色勾选跟 ID" />
+          </Form.Item>
+          <Form.Item name="menu_id" label="归属菜单 ID" extra="角色树挂到哪个页面下；可空">
+            <InputNumber style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item name="enabled" label="启用" valuePropName="checked">
             <Switch />

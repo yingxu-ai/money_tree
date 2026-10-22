@@ -24,6 +24,7 @@ from app.models.system import (
     SysRole,
     SysRoleMenu,
     SysRolePermission,
+    SysTenant,
     SysUser,
     SysUserRole,
 )
@@ -124,16 +125,21 @@ class AuthService:
         )
         menus = [m for m in menus_result.scalars().all() if m.id in allowed_menu_ids]
 
-        # 按租户 SKU 再裁一刀（模式 B）
-        enabled = await get_tenant_enabled_modules(self.session, current.tenant_id)
-        if enabled is not None:
-            menus = [
-                m
-                for m in menus
-                if m.type == "CATALOG"
-                or module_for_menu_path(m.path) is None
-                or module_for_menu_path(m.path) in enabled
-            ]
+        # 按租户 SKU 再裁一刀（模式 B）。平台运维账号始终看全量菜单，
+        # 代管租户只影响业务数据，不能把「系统管理」裁掉。
+        from app.auth.tenant_context import is_platform_user, sku_tenant_id
+
+        if not is_platform_user(current.user):
+            sku_tid = sku_tenant_id(current.user, current.operating_tenant_id)
+            enabled = await get_tenant_enabled_modules(self.session, sku_tid)
+            if enabled is not None:
+                menus = [
+                    m
+                    for m in menus
+                    if m.type == "CATALOG"
+                    or module_for_menu_path(m.path) is None
+                    or module_for_menu_path(m.path) in enabled
+                ]
 
         perm_map = await self._menu_permissions(allowed_menu_ids)
         tree = self._build_menu_tree(menus, perm_map)
@@ -151,8 +157,22 @@ class AuthService:
 
     async def _to_user_info(self, current: CurrentUser) -> UserInfo:
         user = current.user
-        dept_name = await self._dept_name(user.dept_id)
-        enabled = await get_tenant_enabled_modules(self.session, user.tenant_id)
+        from app.auth.tenant_context import is_platform_user, sku_tenant_id
+
+        dept_name = None
+        if user.dept_id is not None and not is_platform_user(user):
+            dept_name = await self._dept_name(user.dept_id, tenant_id=user.tenant_id)
+        tenant_code, tenant_name = await self._tenant_meta(user.tenant_id)
+        platform = is_platform_user(user)
+        # 平台账号 UI 能力不受代管租户 SKU 影响；客户账号才按已购模块裁剪
+        if platform:
+            enabled = None
+        else:
+            sku_tid = sku_tenant_id(user, current.operating_tenant_id)
+            enabled = await get_tenant_enabled_modules(self.session, sku_tid)
+        op_code, op_name = (None, None)
+        if current.operating_tenant_id:
+            op_code, op_name = await self._tenant_meta(current.operating_tenant_id)
         return UserInfo(
             id=user.id,  # type: ignore[arg-type]
             username=user.username,
@@ -160,6 +180,12 @@ class AuthService:
             email=user.email,
             avatar_url=getattr(user, "avatar_url", None),
             tenant_id=user.tenant_id,
+            tenant_code=tenant_code,
+            tenant_name=tenant_name,
+            is_platform_admin=platform,
+            operating_tenant_id=current.operating_tenant_id,
+            operating_tenant_code=op_code,
+            operating_tenant_name=op_name,
             dept_id=user.dept_id,
             dept_name=dept_name,
             status=user.status,
@@ -235,13 +261,32 @@ class AuthService:
                 )
         return nodes
 
-    async def _dept_name(self, dept_id: int | None) -> str | None:
+    async def _dept_name(self, dept_id: int | None, *, tenant_id: int | None = None) -> str | None:
         if dept_id is None:
             return None
-        result = await self.session.execute(
-            select(SysDept.name).where(SysDept.id == dept_id, SysDept.is_deleted.is_(False))
-        )
+        stmt = select(SysDept.name).where(SysDept.id == dept_id, SysDept.is_deleted.is_(False))
+        if tenant_id is not None and tenant_id > 0:
+            stmt = stmt.where(SysDept.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def _tenant_meta(self, tenant_id: int | None) -> tuple[str | None, str | None]:
+        if tenant_id is None:
+            return None, None
+        from app.auth.tenant_context import PLATFORM_TENANT_ID
+
+        if tenant_id == PLATFORM_TENANT_ID:
+            return "platform", "平台运维"
+        result = await self.session.execute(
+            select(SysTenant.code, SysTenant.name).where(
+                SysTenant.id == tenant_id,
+                SysTenant.is_deleted.is_(False),
+            )
+        )
+        row = result.one_or_none()
+        if not row:
+            return None, None
+        return row[0], row[1]
 
 
 class UserService:
@@ -252,20 +297,28 @@ class UserService:
         self,
         page: int,
         page_size: int,
-        current: CurrentUser | None = None,
+        current: CurrentUser,
     ) -> tuple[list[dict], int]:
-        base = select(SysUser).where(SysUser.is_deleted.is_(False))
-        if current is not None:
-            scope = await resolve_scope_filter(
-                self.session,
-                data_scope=current.data_scope,
-                user_id=current.id,
-                dept_id=current.dept_id,
-            )
-            scoped = apply_user_scope(base, scope)
-            if scoped is None:
-                return [], 0
-            base = scoped
+        from app.auth.tenant_context import try_effective_tenant_id
+
+        tid = try_effective_tenant_id(current.user, current.operating_tenant_id)
+        if tid is None:
+            return [], 0
+        base = select(SysUser).where(
+            SysUser.is_deleted.is_(False),
+            SysUser.tenant_id == tid,
+        )
+        scope = await resolve_scope_filter(
+            self.session,
+            data_scope=current.data_scope,
+            user_id=current.id,
+            dept_id=current.dept_id,
+            tenant_id=tid,
+        )
+        scoped = apply_user_scope(base, scope)
+        if scoped is None:
+            return [], 0
+        base = scoped
 
         count_stmt = select(func.count()).select_from(base.subquery())
         total = await self.session.scalar(count_stmt)
@@ -277,18 +330,18 @@ class UserService:
         for user in users:
             role_ids = await self._user_role_ids(user.id)  # type: ignore[arg-type]
             role_names = await self._role_names(role_ids)
-            dept_name = await self._dept_name(user.dept_id)
+            dept_name = await self._dept_name(user.dept_id, tenant_id=tid)
             items.append(self._serialize(user, role_ids, dept_name, role_names))
         return items, total or 0
 
-    async def create_user(self, data) -> dict:
+    async def create_user(self, data, *, tenant_id: int) -> dict:
         exists = await self.session.execute(
             select(SysUser).where(SysUser.username == data.username)
         )
         if exists.scalar_one_or_none():
             raise AuthException("用户名已存在")
         if data.dept_id is not None:
-            await self._ensure_dept(data.dept_id)
+            await self._ensure_dept(data.dept_id, tenant_id=tenant_id)
         await self._ensure_roles(data.role_ids)
 
         user = SysUser(
@@ -298,16 +351,17 @@ class UserService:
             email=data.email,
             status=data.status,
             dept_id=data.dept_id,
+            tenant_id=tenant_id,
         )
         self.session.add(user)
         await self.session.flush()
         await self._sync_roles(user.id, data.role_ids)  # type: ignore[arg-type]
-        dept_name = await self._dept_name(user.dept_id)
+        dept_name = await self._dept_name(user.dept_id, tenant_id=tenant_id)
         role_names = await self._role_names(data.role_ids)
         return self._serialize(user, data.role_ids, dept_name, role_names)
 
-    async def update_user(self, user_id: int, data) -> dict:
-        user = await self._get_user(user_id)
+    async def update_user(self, user_id: int, data, *, tenant_id: int) -> dict:
+        user = await self._get_user(user_id, tenant_id=tenant_id)
         if data.display_name is not None:
             user.display_name = data.display_name
         if data.email is not None:
@@ -318,23 +372,27 @@ class UserService:
             user.password_hash = hash_password(data.password)
         if "dept_id" in data.model_fields_set:
             if data.dept_id is not None:
-                await self._ensure_dept(data.dept_id)
+                await self._ensure_dept(data.dept_id, tenant_id=tenant_id)
             user.dept_id = data.dept_id
         if data.role_ids is not None:
             await self._ensure_roles(data.role_ids)
             await self._sync_roles(user_id, data.role_ids)
         role_ids = await self._user_role_ids(user_id)
         role_names = await self._role_names(role_ids)
-        dept_name = await self._dept_name(user.dept_id)
+        dept_name = await self._dept_name(user.dept_id, tenant_id=tenant_id)
         return self._serialize(user, role_ids, dept_name, role_names)
 
-    async def delete_user(self, user_id: int) -> None:
-        user = await self._get_user(user_id)
+    async def delete_user(self, user_id: int, *, tenant_id: int) -> None:
+        user = await self._get_user(user_id, tenant_id=tenant_id)
         user.is_deleted = True
 
-    async def _get_user(self, user_id: int) -> SysUser:
+    async def _get_user(self, user_id: int, *, tenant_id: int) -> SysUser:
         result = await self.session.execute(
-            select(SysUser).where(SysUser.id == user_id, SysUser.is_deleted.is_(False))
+            select(SysUser).where(
+                SysUser.id == user_id,
+                SysUser.tenant_id == tenant_id,
+                SysUser.is_deleted.is_(False),
+            )
         )
         user = result.scalar_one_or_none()
         if user is None:
@@ -356,9 +414,13 @@ class UserService:
         for role_id in role_ids:
             self.session.add(SysUserRole(user_id=user_id, role_id=role_id))
 
-    async def _ensure_dept(self, dept_id: int) -> None:
+    async def _ensure_dept(self, dept_id: int, *, tenant_id: int) -> None:
         result = await self.session.execute(
-            select(SysDept).where(SysDept.id == dept_id, SysDept.is_deleted.is_(False))
+            select(SysDept).where(
+                SysDept.id == dept_id,
+                SysDept.tenant_id == tenant_id,
+                SysDept.is_deleted.is_(False),
+            )
         )
         if result.scalar_one_or_none() is None:
             raise NotFoundException("部门不存在")
@@ -374,11 +436,15 @@ class UserService:
         if missing:
             raise NotFoundException(f"角色不存在: {missing}")
 
-    async def _dept_name(self, dept_id: int | None) -> str | None:
+    async def _dept_name(self, dept_id: int | None, *, tenant_id: int) -> str | None:
         if dept_id is None:
             return None
         result = await self.session.execute(
-            select(SysDept.name).where(SysDept.id == dept_id, SysDept.is_deleted.is_(False))
+            select(SysDept.name).where(
+                SysDept.id == dept_id,
+                SysDept.tenant_id == tenant_id,
+                SysDept.is_deleted.is_(False),
+            )
         )
         return result.scalar_one_or_none()
 

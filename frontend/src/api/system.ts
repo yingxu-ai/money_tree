@@ -31,12 +31,34 @@ export const deleteMenu = (id: number) => deleteData(`/menus/${id}`);
 export const fetchPermissions = () =>
   getData<Array<{ id: number; code: string; name: string }>>("/permissions");
 
+export type PermissionAssignNode = {
+  key: string;
+  title: string;
+  node_type: string;
+  menu_id?: number | null;
+  api_rule_id?: number;
+  permission_id?: number | null;
+  permission_code?: string;
+  name?: string;
+  method?: string;
+  path_pattern?: string;
+  stable_key?: string;
+  enabled?: boolean;
+  disableCheckbox?: boolean;
+  children?: PermissionAssignNode[];
+};
+
+export const fetchPermissionAssignTree = () =>
+  getData<PermissionAssignNode[]>("/permissions/assign-tree");
+
 export type ApiPermissionRule = {
   id: number;
+  stable_key?: string;
   method: string;
   path_pattern: string;
   permission_code: string;
   name: string;
+  menu_id?: number | null;
   enabled: boolean;
   sort: number;
   updated_at?: string | null;
@@ -59,6 +81,23 @@ export const updateApiPermission = (id: number, data: unknown) =>
   putData<ApiPermissionRule>(`/api-permissions/${id}`, data);
 
 export const deleteApiPermission = (id: number) => deleteData(`/api-permissions/${id}`);
+
+export type TenantItem = {
+  id: number;
+  name: string;
+  code: string;
+  enabled_modules: string;
+  enabled_module_list?: string[] | null;
+  status: string;
+  remark?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export const fetchTenants = () => getData<TenantItem[]>("/tenants");
+export const createTenant = (data: unknown) => postData<TenantItem>("/tenants", data);
+export const updateTenant = (id: number, data: unknown) => putData<TenantItem>(`/tenants/${id}`, data);
+export const deleteTenant = (id: number) => deleteData(`/tenants/${id}`);
 
 export const fetchDepts = () => getData<DeptItem[]>("/depts");
 export const createDept = (data: unknown) => postData<DeptItem>("/depts", data);

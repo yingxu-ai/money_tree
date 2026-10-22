@@ -12,6 +12,7 @@ import {
   PageHeader,
   StatusTag,
 } from "@/components/kit";
+import OperatingTenantBanner from "@/components/OperatingTenantBanner";
 import { useMutation } from "@/hooks/useMutation";
 import { useRequest } from "@/hooks/useRequest";
 import type { RoleItem, UserItem } from "@/types";
@@ -56,6 +57,7 @@ export default function UsersPage() {
 
   return (
     <div>
+      <OperatingTenantBanner />
       <PageHeader
         title="账号管理"
         subtitle="账号关联主部门与角色，控制登录身份与权限"

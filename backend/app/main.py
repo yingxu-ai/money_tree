@@ -24,6 +24,21 @@ async def lifespan(app: FastAPI):
     from app.modules.scheduling.store import store
 
     store.reload_from_db()
+
+    # 启动时按稳定 key 同步全部路由 → 接口权限表（改路径只更新，不丢 id）
+    async with async_session_factory() as session:
+        from app.application.api_permission_service import ApiPermissionService
+        from app.core.logging import get_logger
+
+        result = await ApiPermissionService(session).sync_from_app(app)
+        await session.commit()
+        get_logger("startup").info(
+            "api permissions synced: created=%s updated=%s total=%s admin_granted=%s",
+            result.get("created"),
+            result.get("updated"),
+            result.get("total_routes"),
+            result.get("admin_granted"),
+        )
     yield
 
 
