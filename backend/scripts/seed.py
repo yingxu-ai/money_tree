@@ -74,6 +74,10 @@ PERMISSIONS = [
     ("scheduling:report:early_start", "提前开工", "scheduling", "early_start"),
     ("scheduling:variance:resolve", "计划实绩偏差处置", "scheduling", "variance"),
     ("scheduling:baseline:restore", "恢复排产测试数据", "scheduling", "baseline_restore"),
+    ("scheduling:shop_floor:review", "生产日报确认", "scheduling", "shop_floor_review"),
+    ("production_progress:view", "查看生产进度", "production_progress", "view"),
+    ("production_progress:report", "生产进度报工", "production_progress", "report"),
+    ("production_progress:review", "生产进度日报确认", "production_progress", "review"),
     ("tenant:view", "查看租户", "tenant", "view"),
     ("tenant:create", "创建租户", "tenant", "create"),
     ("tenant:update", "更新租户", "tenant", "update"),
@@ -110,8 +114,16 @@ MENUS = [
     (62, 60, "工单管理", "/scheduling/orders", "scheduling/WorkOrders", "MENU", 2, "UnorderedListOutlined"),
     (63, 60, "排产甘特", "/scheduling/gantt", "scheduling/Gantt", "MENU", 3, "FundOutlined"),
     (64, 60, "工序报工", "/scheduling/report", "scheduling/Report", "MENU", 4, "ThunderboltOutlined"),
+    (65, 60, "生产日报", "/scheduling/daily", "scheduling/DailyReport", "MENU", 5, "FormOutlined"),
+    # 生产进度（全局看板 → 报工/分析 → 基础信息）
+    (80, None, "生产进度", None, None, "CATALOG", 7, "LineChartOutlined"),
+    (91, 80, "全局看板", "/production-progress/cockpit", "production-progress/Cockpit", "MENU", 0, "DashboardOutlined"),
+    (81, 80, "基础信息", "/production-progress/master", "production-progress/BaseInfo", "MENU", 1, "TeamOutlined"),
+    (88, 80, "工单管理", "/production-progress/orders", "production-progress/WorkOrders", "MENU", 2, "UnorderedListOutlined"),
+    (89, 80, "每日报工", "/production-progress/daily", "production-progress/DailyReport", "MENU", 3, "FormOutlined"),
+    (90, 80, "进度分析", "/production-progress/analysis", "production-progress/ProgressAnalysis", "MENU", 4, "FundOutlined"),
     # 工具箱（前端测算工具，可继续加子菜单）
-    (70, None, "工具箱", None, None, "CATALOG", 7, "ToolOutlined"),
+    (70, None, "工具箱", None, None, "CATALOG", 8, "ToolOutlined"),
     (71, 70, "电石质检 ROI", "/tools/calcium-roi", "tools/calcium-roi/CalciumRoi", "MENU", 1, "CalculatorOutlined"),
     (72, 70, "单位换算", "/tools/unit-converter", "tools/unit-converter/UnitConverter", "MENU", 2, "SwapOutlined"),
 ]
@@ -149,6 +161,12 @@ RETIRED_MENU_IDS = [
     52,
     53,
     54,  # 设备运营
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,  # 生产进度曾拆开的基础信息子菜单 → 已合并为「基础信息」
 ]
 
 # 示例部门树（固定 id，便于挂用户）
@@ -617,7 +635,7 @@ async def _sync_tenant_admin_role(session) -> None:
         session,
         role,
         # 1=系统管理目录（否则 users/depts 等子菜单挂不上树）
-        menu_ids={1, 2, 3, 10, 11, 60, 61, 62, 63, 64},
+        menu_ids={1, 2, 3, 10, 11, 60, 61, 62, 63, 64, 65, 80, 81, 88, 89, 90, 91},
         perm_codes={
             "user:view",
             "user:create",
@@ -638,6 +656,10 @@ async def _sync_tenant_admin_role(session) -> None:
             "scheduling:report:start",
             "scheduling:report:early_start",
             "scheduling:variance:resolve",
+            "scheduling:shop_floor:review",
+            "production_progress:view",
+            "production_progress:report",
+            "production_progress:review",
         },
     )
     await _ensure_role_api_from_perm_codes(
@@ -663,6 +685,10 @@ async def _sync_tenant_admin_role(session) -> None:
             "scheduling:report:start",
             "scheduling:report:early_start",
             "scheduling:variance:resolve",
+            "scheduling:shop_floor:review",
+            "production_progress:view",
+            "production_progress:report",
+            "production_progress:review",
         },
     )
 

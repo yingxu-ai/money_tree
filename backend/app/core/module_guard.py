@@ -12,6 +12,7 @@ from app.core.security import decode_token
 # path 相对 api_prefix 之后
 MODULE_API_PREFIXES: dict[str, list[str]] = {
     "scheduling": ["/scheduling"],
+    "production-progress": ["/production-progress"],
     "equipment-analysis": ["/equipment-analysis"],
     "demo": ["/demo"],
     # 平台侧系统能力（租户开通 SKU 不含此项时不可访问）

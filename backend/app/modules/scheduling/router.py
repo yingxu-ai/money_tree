@@ -703,6 +703,157 @@ async def delete_daily_log(log_id: str, request: Request, _user=Depends(get_curr
     return ok(request, store.delete_daily_log(log_id))
 
 
+class ShopFloorReportBody(BaseModel):
+    work_date: str | None = None
+    person_id: str
+    process_name: str | None = None
+    template_id: str | None = None
+    qty: float
+    hours: float = 0
+    start_time: str | None = None
+    end_time: str | None = None
+    link_type: str | None = None  # work_order | product
+    work_order_id: str | None = None
+    work_order_label: str | None = None
+    product: str | None = None
+    equipment_id: str | None = None
+    equipment_name: str | None = None
+    note: str | None = None
+
+
+class ShopFloorReportRowBody(BaseModel):
+    process_name: str | None = None
+    template_id: str | None = None
+    qty: float
+    hours: float = 0
+    start_time: str | None = None
+    end_time: str | None = None
+    link_type: str | None = None
+    work_order_id: str | None = None
+    work_order_label: str | None = None
+    product: str | None = None
+    equipment_id: str | None = None
+    equipment_name: str | None = None
+    note: str | None = None
+
+
+class ShopFloorBatchBody(BaseModel):
+    person_id: str
+    work_date: str | None = None
+    rows: list[ShopFloorReportRowBody]
+
+
+class ShopFloorReviewBody(BaseModel):
+    action: str  # confirm | reject
+    reviewer: str | None = None
+    note: str | None = None
+
+
+@router.get("/shop-floor-reports")
+async def list_shop_floor_reports(
+    request: Request,
+    work_date: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+    status: str | None = Query(None),
+    _user=Depends(require_permission("scheduling:view")),
+    store: SchedulingStore = Depends(_store),
+):
+    """生产日报列表（免排产）：员工提交记录 + 主数据选项。"""
+    return ok(
+        request,
+        store.list_shop_floor_reports(
+            work_date=work_date,
+            date_from=date_from,
+            date_to=date_to,
+            status=status,
+        ),
+    )
+
+
+@router.get("/shop-floor-reports/shift-hint")
+async def shop_floor_shift_hint(
+    request: Request,
+    person_id: str = Query(...),
+    work_date: str | None = Query(None),
+    _user=Depends(require_permission("scheduling:view")),
+    store: SchedulingStore = Depends(_store),
+):
+    """人员当日班次起止，供报工默认填入。"""
+    return ok(request, store.person_shift_window(person_id, work_date=work_date))
+
+
+@router.get("/shop-floor-reports/progress")
+async def shop_floor_progress(
+    request: Request,
+    _user=Depends(require_permission("scheduling:view")),
+    store: SchedulingStore = Depends(_store),
+):
+    """工单/产品进度看板：已确认产量汇总 + 距交期日历天数。"""
+    return ok(request, store.shop_floor_progress())
+
+
+@router.post("/shop-floor-reports")
+async def submit_shop_floor_report(
+    payload: ShopFloorReportBody,
+    request: Request,
+    _user=Depends(require_permission("scheduling:report:start")),
+    store: SchedulingStore = Depends(_store),
+):
+    """员工下班提交生产日报（待主任确认）。"""
+    return ok(request, store.submit_shop_floor_report(payload.model_dump()))
+
+
+@router.post("/shop-floor-reports/batch")
+async def submit_shop_floor_reports_batch(
+    payload: ShopFloorBatchBody,
+    request: Request,
+    _user=Depends(require_permission("scheduling:report:start")),
+    store: SchedulingStore = Depends(_store),
+):
+    """一人多行批量提交。"""
+    return ok(
+        request,
+        store.submit_shop_floor_reports_batch(
+            {
+                "person_id": payload.person_id,
+                "work_date": payload.work_date,
+                "rows": [r.model_dump() for r in payload.rows],
+            }
+        ),
+    )
+
+
+@router.post("/shop-floor-reports/{report_id}/review")
+async def review_shop_floor_report(
+    report_id: str,
+    payload: ShopFloorReviewBody,
+    request: Request,
+    _user=Depends(require_permission("scheduling:shop_floor:review")),
+    store: SchedulingStore = Depends(_store),
+):
+    """车间主任确认或驳回。"""
+    return ok(
+        request,
+        store.review_shop_floor_report(
+            report_id,
+            action=payload.action,
+            reviewer=payload.reviewer,
+            note=payload.note,
+        ),
+    )
+
+
+@router.delete("/shop-floor-reports/{report_id}")
+async def delete_shop_floor_report(
+    report_id: str,
+    request: Request,
+    _user=Depends(require_permission("scheduling:report:start")),
+    store: SchedulingStore = Depends(_store),
+):
+    return ok(request, store.delete_shop_floor_report(report_id))
+
+
 @router.post("/report/{op_id}/start")
 async def start_op(op_id: str, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
     return ok(request, store.start_op(op_id))

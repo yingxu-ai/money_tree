@@ -77,6 +77,22 @@ def _parse_hhmm(s: str) -> int:
     return h * 60 + m
 
 
+def _shift_start_end_dt(work_date: str, shift: dict | None) -> tuple[datetime, datetime]:
+    """班次归属日 work_date 上的起止时刻；跨午夜则结束落在次日。"""
+    d = date.fromisoformat((work_date or _planning_today().isoformat())[:10])
+    start_m = _parse_hhmm((shift or {}).get("start_time") or "08:00")
+    end_m = _parse_hhmm((shift or {}).get("end_time") or "16:00")
+    start_dt = datetime.combine(d, datetime.min.time()) + timedelta(minutes=start_m)
+    overnight = bool((shift or {}).get("crosses_midnight")) or end_m <= start_m
+    if overnight:
+        end_dt = datetime.combine(d + timedelta(days=1), datetime.min.time()) + timedelta(
+            minutes=end_m
+        )
+    else:
+        end_dt = datetime.combine(d, datetime.min.time()) + timedelta(minutes=end_m)
+    return start_dt, end_dt
+
+
 def _shift_intervals(shift: dict | None) -> list[tuple[int, int]]:
     """班次在一天内的占用区间（分钟）；跨午夜拆成两段。"""
     if not shift:
@@ -639,6 +655,7 @@ def _build_seed() -> dict[str, Any]:
             "customer_name": "华东装备厂",
             "product": "底座总成 A",
             "due_date": _d(6),
+            "plan_qty": 100,
             "status": "producing",
         },
         {
@@ -649,6 +666,7 @@ def _build_seed() -> dict[str, Any]:
             "customer_name": None,
             "product": "空压机 C",
             "due_date": _d(5),
+            "plan_qty": 1,
             "status": "open",
         },
         {
@@ -659,6 +677,7 @@ def _build_seed() -> dict[str, Any]:
             "customer_name": None,
             "product": "样件 G",
             "due_date": _d(-1),
+            "plan_qty": 20,
             "status": "done",
         },
     ]
@@ -918,6 +937,49 @@ def _build_seed() -> dict[str, Any]:
             },
         ],
         "busy_acks": [],
+        # 免排产「生产日报」：员工提交 → 主任确认（与工序报工 daily_logs 分离）
+        "shop_floor_reports": [
+            {
+                "id": "sfr-1",
+                "work_date": _d(-1),
+                "status": "confirmed",
+                "link_type": "order",
+                "work_order_id": None,
+                "order_id": "ord-1",
+                "product": "",
+                "process_name": "焊接",
+                "template_id": None,
+                "qty": 80,
+                "hours": 8,
+                "person_id": "p1",
+                "equipment_id": None,
+                "note": "样例：昨日已确认",
+                "submitted_at": _d(-1) + "T17:10:00",
+                "reviewed_at": _d(-1) + "T17:40:00",
+                "reviewed_by": "车间主任",
+                "review_note": "",
+            },
+            {
+                "id": "sfr-2",
+                "work_date": _d(0),
+                "status": "pending",
+                "link_type": "order",
+                "work_order_id": None,
+                "order_id": "ord-1",
+                "product": "",
+                "process_name": "焊接",
+                "template_id": None,
+                "qty": 40,
+                "hours": 4,
+                "person_id": "p2",
+                "equipment_id": None,
+                "note": "样例：待主任确认",
+                "submitted_at": _d(0) + "T16:50:00",
+                "reviewed_at": None,
+                "reviewed_by": None,
+                "review_note": "",
+            },
+        ],
         "_seq": {
             "person": 5,
             "template": 4,
@@ -935,6 +997,7 @@ def _build_seed() -> dict[str, Any]:
             "equipment": 8,
             "resource": 4,
             "skill": 8,
+            "shop_floor_report": 2,
         },
         "_demo_meta": {
             "anchor": _d(0),
@@ -947,6 +1010,360 @@ def _build_seed() -> dict[str, Any]:
             ],
         },
     }
+
+
+def _build_progress_bulk_seed(*, person_count: int = 150, days: int = 21) -> dict[str, Any]:
+    """生产进度演示大数据：约 N 人三班倒 + 多日多工序报工，便于效率分析看效果。"""
+    import random
+
+    rng = random.Random(20261105)
+    base = _build_seed()
+    n = max(30, min(int(person_count or 150), 300))
+    day_n = max(7, min(int(days or 21), 45))
+
+    surnames = list("赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻")
+    given = [
+        "伟", "强", "芳", "敏", "静", "丽", "勇", "军", "磊", "洋",
+        "艳", "杰", "涛", "超", "秀英", "霞", "平", "刚", "桂英", "建华",
+        "文", "辉", "鹏", "飞", "娜", "婷", "浩", "凯", "鑫", "宇",
+    ]
+    shifts_fam = ["sh-day", "sh-mid", "sh-night"]
+    shift_label = {"sh-day": "白班", "sh-mid": "中班", "sh-night": "夜班"}
+    shift_window = {
+        "sh-day": ("08:00", "16:00"),
+        "sh-mid": ("16:00", "00:00"),
+        "sh-night": ("00:00", "08:00"),
+    }
+    resources = [
+        {"id": "res-assembly", "code": "ASM1", "name": "装配一组", "status": "active", "sort": 10},
+        {"id": "res-weld", "code": "WLD2", "name": "焊接二组", "status": "active", "sort": 20},
+        {"id": "res-debug", "code": "DBG", "name": "调试组", "status": "active", "sort": 30},
+        {"id": "res-qc", "code": "QC", "name": "质检组", "status": "active", "sort": 40},
+        {"id": "res-cnc", "code": "CNC1", "name": "机加一组", "status": "active", "sort": 50},
+        {"id": "res-paint", "code": "PT1", "name": "喷涂组", "status": "active", "sort": 60},
+    ]
+    res_ids = [r["id"] for r in resources]
+    skill_by_res = {
+        "res-assembly": ["sk-assembly", "sk-pack"],
+        "res-weld": ["sk-weld"],
+        "res-debug": ["sk-debug", "sk-elec"],
+        "res-qc": ["sk-qc"],
+        "res-cnc": ["sk-cnc"],
+        "res-paint": ["sk-paint"],
+    }
+    process_by_res = {
+        "res-assembly": "装配",
+        "res-weld": "焊接",
+        "res-debug": "调试",
+        "res-qc": "质检",
+        "res-cnc": "机加",
+        "res-paint": "喷涂",
+    }
+
+    equipments: list[dict[str, Any]] = []
+    eq_by_res: dict[str, list[str]] = {rid: [] for rid in res_ids}
+    eq_seq = 0
+    for rid in res_ids:
+        prefix = {
+            "res-assembly": "装配台",
+            "res-weld": "焊机",
+            "res-debug": "调试台",
+            "res-qc": "检测台",
+            "res-cnc": "数控机床",
+            "res-paint": "喷涂线",
+        }[rid]
+        code_prefix = {
+            "res-assembly": "ASM",
+            "res-weld": "WELD",
+            "res-debug": "DBG",
+            "res-qc": "QC",
+            "res-cnc": "CNC",
+            "res-paint": "PT",
+        }[rid]
+        for i in range(1, 5):
+            eq_seq += 1
+            eid = f"eq-bulk-{eq_seq}"
+            equipments.append(
+                {
+                    "id": eid,
+                    "code": f"{code_prefix}-{i:02d}",
+                    "name": f"{prefix}{i}",
+                    "resource_id": rid,
+                    "status": "active",
+                    "sort": eq_seq * 10,
+                }
+            )
+            eq_by_res[rid].append(eid)
+
+    persons: list[dict[str, Any]] = []
+    assignments: list[dict[str, Any]] = []
+    per_shift = n // 3
+    rem = n - per_shift * 3
+    shift_quota = [
+        ("sh-day", per_shift + (1 if rem > 0 else 0)),
+        ("sh-mid", per_shift + (1 if rem > 1 else 0)),
+        ("sh-night", per_shift),
+    ]
+    pid = 0
+    for fam, count in shift_quota:
+        for _ in range(count):
+            pid += 1
+            rid = res_ids[(pid - 1) % len(res_ids)]
+            name = surnames[(pid * 7) % len(surnames)] + given[(pid * 13) % len(given)]
+            if pid % 11 == 0:
+                name = surnames[(pid * 3) % len(surnames)] + given[(pid * 5) % len(given)] + given[(pid * 9) % len(given)]
+            persons.append(
+                {
+                    "id": f"p{pid}",
+                    "name": name,
+                    "code": f"EMP-{pid:03d}",
+                    "skill_ids": list(skill_by_res[rid]),
+                    "status": "active",
+                    "resource_id": rid,
+                    "shift_family_ids": list(shifts_fam),
+                    "_shift_family_id": fam,
+                    "_tier": pid % 5,  # 0高效 … 4偏低
+                }
+            )
+            assignments.append(
+                {
+                    "id": f"psa-bulk-{pid}",
+                    "person_id": f"p{pid}",
+                    "shift_family_id": fam,
+                    "start_date": _d(-40),
+                    "end_date": None,
+                    "kind": "roster",
+                    "status": "open",
+                    "note": shift_label[fam],
+                }
+            )
+
+    # 主分析订单：大计划量，长周期
+    orders = [
+        {
+            "id": "ord-1",
+            "code": "SO-BULK-001",
+            "name": "底座总成批量供货",
+            "source_type": "customer",
+            "customer_name": "华东装备厂",
+            "product": "底座总成 A",
+            "due_date": _d(14),
+            "plan_qty": 50000,
+            "status": "producing",
+        },
+        {
+            "id": "ord-bulk-2",
+            "code": "SO-BULK-002",
+            "name": "机架焊接配套",
+            "source_type": "customer",
+            "customer_name": "甬江机电",
+            "product": "机架组件 B",
+            "due_date": _d(10),
+            "plan_qty": 8000,
+            "status": "producing",
+        },
+    ]
+    work_orders = [
+        {
+            "id": "wo-1",
+            "order_id": "ord-1",
+            "code": "WO-BULK-001",
+            "name": "底座总成主线",
+            "product": "底座总成 A",
+            "due_date": _d(14),
+            "priority": "high",
+            "wo_kind": "normal",
+            "status": "producing",
+        },
+        {
+            "id": "wo-bulk-1b",
+            "order_id": "ord-1",
+            "code": "WO-BULK-001B",
+            "name": "底座总成辅线",
+            "product": "底座总成 A",
+            "due_date": _d(14),
+            "priority": "normal",
+            "wo_kind": "normal",
+            "status": "producing",
+        },
+        {
+            "id": "wo-bulk-2",
+            "order_id": "ord-bulk-2",
+            "code": "WO-BULK-002",
+            "name": "机架焊接",
+            "product": "机架组件 B",
+            "due_date": _d(10),
+            "priority": "rush",
+            "wo_kind": "normal",
+            "status": "producing",
+        },
+    ]
+    operations = [
+        {
+            "id": "op-bulk-1",
+            "work_order_id": "wo-1",
+            "name": "焊接",
+            "seq": 1,
+            "skill_id": "sk-weld",
+            "resource_id": "res-weld",
+            "equipment_id": eq_by_res["res-weld"][0],
+            "assignee_id": "p1",
+            "assignee_ids": ["p1"],
+            "slot": "full",
+            "shift_family_id": "sh-day",
+            "shift_id": "shv-day-2",
+            "plan_start": _d(-(day_n - 1)),
+            "plan_end": _d(14),
+            "status": "running",
+            "progress": 45,
+        },
+        {
+            "id": "op-bulk-2",
+            "work_order_id": "wo-1",
+            "name": "装配",
+            "seq": 2,
+            "skill_id": "sk-assembly",
+            "resource_id": "res-assembly",
+            "equipment_id": eq_by_res["res-assembly"][0],
+            "assignee_id": "p2",
+            "assignee_ids": ["p2"],
+            "slot": "full",
+            "shift_family_id": "sh-day",
+            "shift_id": "shv-day-2",
+            "plan_start": _d(-(day_n - 1)),
+            "plan_end": _d(14),
+            "status": "running",
+            "progress": 35,
+        },
+    ]
+
+    reports: list[dict[str, Any]] = []
+    finished: list[dict[str, Any]] = []
+    sfr = 0
+    # 每人按班每天约 55%~75% 出勤报工，效率分层
+    for day_offset in range(-(day_n - 1), 1):
+        work_date = _d(day_offset)
+        day_persons = [p for p in persons if rng.random() < (0.62 + (p["_tier"] % 3) * 0.04)]
+        for p in day_persons:
+            fam = p["_shift_family_id"]
+            rid = p["resource_id"]
+            proc = process_by_res[rid]
+            eqs = eq_by_res[rid]
+            eid = eqs[(int(p["id"][1:]) + day_offset) % len(eqs)]
+            tier = p["_tier"]
+            # 高效：产量高工时略少；低效相反
+            base_qty = {0: 48, 1: 40, 2: 32, 3: 26, 4: 18}[tier]
+            qty = max(8, int(base_qty + rng.randint(-6, 8) + (2 if fam == "sh-day" else 0)))
+            hours = round(7.2 + tier * 0.25 + rng.uniform(-0.4, 0.5), 1)
+            hours = max(4.0, min(8.5, hours))
+            st, et = shift_window[fam]
+            wo_id = "wo-1" if rid != "res-weld" or rng.random() < 0.7 else "wo-bulk-1b"
+            if rid == "res-weld" and rng.random() < 0.25:
+                wo_id = "wo-bulk-2"
+            order_id = "ord-bulk-2" if wo_id == "wo-bulk-2" else "ord-1"
+            product = "机架组件 B" if order_id == "ord-bulk-2" else "底座总成 A"
+            status = "confirmed"
+            if day_offset == 0 and rng.random() < 0.08:
+                status = "pending"
+            elif rng.random() < 0.03:
+                status = "rejected"
+            sfr += 1
+            reports.append(
+                {
+                    "id": f"sfr-bulk-{sfr}",
+                    "work_date": work_date,
+                    "status": status,
+                    "link_type": "work_order",
+                    "work_order_id": wo_id,
+                    "work_order_label": None,
+                    "order_id": order_id,
+                    "product": product,
+                    "process_name": proc,
+                    "template_id": None,
+                    "qty": float(qty),
+                    "hours": float(hours),
+                    "start_time": st,
+                    "end_time": et,
+                    "person_id": p["id"],
+                    "equipment_id": eid,
+                    "equipment_name": next(e["name"] for e in equipments if e["id"] == eid),
+                    "note": "" if status == "confirmed" else ("待确认" if status == "pending" else "数量不符驳回"),
+                    "submitted_at": f"{work_date}T{st[:2]}:50:00",
+                    "reviewed_at": f"{work_date}T{et[:2] if et != '00:00' else '23'}:10:00" if status != "pending" else None,
+                    "reviewed_by": "车间主任" if status != "pending" else None,
+                    "review_note": "请重报" if status == "rejected" else "",
+                }
+            )
+        # 成品确认（主产品）
+        if day_offset % 2 == 0:
+            finished.append(
+                {
+                    "id": f"sff-bulk-{work_date}",
+                    "work_date": work_date,
+                    "product": "底座总成 A",
+                    "suggested_qty": 800,
+                    "confirmed_qty": 780 + rng.randint(-40, 60),
+                    "status": "confirmed",
+                    "confirmed_by": "车间主任",
+                    "confirmed_at": f"{work_date}T18:00:00",
+                    "note": "批量演示成品确认",
+                }
+            )
+
+    # 去掉临时字段
+    clean_persons = []
+    for p in persons:
+        q = {k: v for k, v in p.items() if not k.startswith("_")}
+        clean_persons.append(q)
+
+    out = deepcopy(base)
+    out["resources"] = resources
+    out["equipments"] = equipments
+    out["persons"] = clean_persons
+    out["shift_assignments"] = assignments
+    out["orders"] = orders
+    out["work_orders"] = work_orders
+    out["operations"] = operations
+    out["leaves"] = []
+    out["shop_floor_reports"] = reports
+    out["shop_floor_finished"] = finished
+    out["daily_logs"] = []
+    out["events"] = [
+        {
+            "id": "evt-bulk-1",
+            "person_name": "系统",
+            "op_name": "生产进度",
+            "message": f"已载入批量演示：{n} 人三班倒 · {day_n} 日报工",
+            "created_at": _d(0) + "T08:00:00",
+        }
+    ]
+    seq = out.setdefault("_seq", {})
+    seq.update(
+        {
+            "person": n,
+            "equipment": len(equipments),
+            "resource": len(resources),
+            "shift_assignment": len(assignments),
+            "shop_floor_report": sfr,
+            "shop_floor_finished": len(finished),
+            "order": 20,
+            "work_order": 20,
+            "operation": 120,
+        }
+    )
+    out["_demo_meta"] = {
+        "anchor": _d(0),
+        "kind": "progress_bulk",
+        "person_count": n,
+        "days": day_n,
+        "report_count": sfr,
+        "scenarios": [
+            f"{n}人三班倒（白/中/夜约各1/3）",
+            f"近{day_n}日多工序报工",
+            "人员/班组/设备效率分层可对比",
+        ],
+    }
+    return out
 
 
 class _PersistLock:
@@ -1002,6 +1419,7 @@ class SchedulingStore:
                 self._ensure_three_shift_regime_unlocked()
                 self._ensure_shift_sort_orders_unlocked()
                 self._ensure_resources_shape_unlocked()
+                self._ensure_shop_floor_reports_unlocked()
                 self._sync_person_leave_status_unlocked()
                 self._persist_unlocked()
                 return True
@@ -1009,6 +1427,7 @@ class SchedulingStore:
             self._ensure_three_shift_regime_unlocked()
             self._ensure_shift_sort_orders_unlocked()
             self._ensure_resources_shape_unlocked()
+            self._ensure_shop_floor_reports_unlocked()
             self._persist_unlocked()
             return False
 
@@ -1052,6 +1471,39 @@ class SchedulingStore:
                 "message": (
                     f"已将排产全部恢复为测试数据（锚点 {anchor}）。"
                     "人员、班制、排班、工单与工序等本地修改均已作废。"
+                ),
+            }
+
+    def seed_progress_bulk_demo(
+        self, *, person_count: int = 150, days: int = 21
+    ) -> dict[str, Any]:
+        """覆盖写入生产进度批量演示数据（约 N 人三班倒 + 多日报工）。"""
+        with self._lock:
+            fresh = _build_progress_bulk_seed(person_count=person_count, days=days)
+            self._data = fresh
+            self._undo_stack.clear()
+            self._redo_stack.clear()
+            self._sandbox_base = None
+            self._last_saved_payload = None
+            self._ensure_shop_floor_reports_unlocked()
+            self._ensure_shop_floor_finished_unlocked()
+            self._ensure_three_shift_regime_unlocked()
+            self._ensure_shift_sort_orders_unlocked()
+            self._ensure_equipments_shape_unlocked()
+            self._persist_unlocked()
+            meta = (self._data.get("_demo_meta") or {})
+            return {
+                "ok": True,
+                "tenant_id": self.tenant_id,
+                "person_count": meta.get("person_count"),
+                "days": meta.get("days"),
+                "report_count": meta.get("report_count"),
+                "equipment_count": len(self._data.get("equipments") or []),
+                "scenarios": meta.get("scenarios") or [],
+                "message": (
+                    f"已载入生产进度批量演示：{meta.get('person_count')} 人三班倒，"
+                    f"近 {meta.get('days')} 日共 {meta.get('report_count')} 条报工。"
+                    "请打开「进度分析」订单详情查看效率页。"
                 ),
             }
 
@@ -6813,6 +7265,2282 @@ class SchedulingStore:
                 "ok": True,
                 "deleted_id": log_id,
                 "message": f"已删除 {person.get('name') or ''} {day} 报工记录",
+            }
+
+    # ── 生产日报（免排产：员工提交 → 主任确认）──────────────────────────
+
+    def _ensure_shop_floor_reports_unlocked(self) -> None:
+        if not isinstance(self._data.get("shop_floor_reports"), list):
+            self._data["shop_floor_reports"] = []
+        seq = self._data.setdefault("_seq", {})
+        if "shop_floor_report" not in seq:
+            seq["shop_floor_report"] = len(self._data["shop_floor_reports"])
+        self._ensure_shop_floor_settings_unlocked()
+
+    def _ensure_shop_floor_settings_unlocked(self) -> dict[str, Any]:
+        raw = self._data.get("shop_floor_settings")
+        if not isinstance(raw, dict):
+            raw = {}
+        grace = int(raw.get("off_shift_grace_minutes") or 30)
+        grace = max(0, min(grace, 240))
+        backfill = int(raw.get("history_backfill_days") or 7)
+        backfill = max(0, min(backfill, 31))
+        settings = {
+            "off_shift_grace_minutes": grace,
+            "history_backfill_days": backfill,
+        }
+        self._data["shop_floor_settings"] = settings
+        return settings
+
+    def get_shop_floor_settings(self) -> dict[str, Any]:
+        with self._lock:
+            return dict(self._ensure_shop_floor_settings_unlocked())
+
+    def update_shop_floor_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            cur = self._ensure_shop_floor_settings_unlocked()
+            if "off_shift_grace_minutes" in payload and payload.get("off_shift_grace_minutes") is not None:
+                grace = int(payload.get("off_shift_grace_minutes"))
+                if grace < 0 or grace > 240:
+                    raise ValidationException("下班宽限须在 0～240 分钟")
+                cur["off_shift_grace_minutes"] = grace
+            if "history_backfill_days" in payload and payload.get("history_backfill_days") is not None:
+                days = int(payload.get("history_backfill_days"))
+                if days < 0 or days > 31:
+                    raise ValidationException("历史补报天数须在 0～31")
+                cur["history_backfill_days"] = days
+            self._data["shop_floor_settings"] = cur
+            return dict(cur)
+
+    def _slot_duty_state_unlocked(
+        self,
+        *,
+        work_date: str,
+        shift_family_id: str | None,
+        now: datetime | None = None,
+        grace_minutes: int | None = None,
+    ) -> str:
+        """人×日班次相对此刻的催报状态：not_started | open | due。"""
+        today = _planning_today().isoformat()
+        day = (work_date or "")[:10]
+        if day and day < today:
+            return "due"
+        settings = self._ensure_shop_floor_settings_unlocked()
+        grace = (
+            int(grace_minutes)
+            if grace_minutes is not None
+            else int(settings.get("off_shift_grace_minutes") or 30)
+        )
+        now_dt = now or datetime.now()
+        shift = self._active_shift_for_family(shift_family_id) if shift_family_id else None
+        if not shift:
+            # 无班次定义时：归属日当天结束才催
+            end_dt = datetime.combine(date.fromisoformat(day or today), datetime.min.time()) + timedelta(
+                hours=23, minutes=59
+            )
+            start_dt = datetime.combine(date.fromisoformat(day or today), datetime.min.time())
+        else:
+            start_dt, end_dt = _shift_start_end_dt(day or today, shift)
+        if now_dt < start_dt:
+            return "not_started"
+        if now_dt < end_dt + timedelta(minutes=max(0, grace)):
+            return "open"
+        return "due"
+
+    def _enrich_shop_floor_report(self, row: dict[str, Any]) -> dict[str, Any]:
+        persons = self._person_map()
+        eqs = {e["id"]: e for e in (self._data.get("equipments") or [])}
+        orders = self._order_map()
+        wos = self._wo_map()
+        person = persons.get(row.get("person_id") or "") or {}
+        eq = eqs.get(row.get("equipment_id") or "") or {}
+        wo = wos.get(row.get("work_order_id") or "") or {}
+        order_id = row.get("order_id") or wo.get("order_id")
+        order = orders.get(order_id or "") or {}
+        product = (
+            (row.get("product") or "").strip()
+            or (wo.get("product") or "").strip()
+            or (order.get("product") or "").strip()
+        )
+        wo_label = (
+            (row.get("work_order_label") or "").strip()
+            or (
+                f"{wo.get('code')} · {wo.get('name')}"
+                if wo.get("code") or wo.get("name")
+                else ""
+            )
+        )
+        eq_name = (eq.get("name") or "").strip() or (row.get("equipment_name") or "").strip() or None
+        applicant = (row.get("submitted_by") or "").strip() or None
+        confirmer = (row.get("reviewed_by") or "").strip() or None
+        work_date = (row.get("work_date") or "")[:10]
+        person_id = row.get("person_id") or ""
+        fam = (row.get("shift_family_id") or "").strip() or None
+        if not fam and person_id and work_date:
+            fam = self._person_roster_family_on_day_unlocked(str(person_id), work_date)
+        shift = self._active_shift_for_family(fam) if fam else None
+        shift_name = (
+            (row.get("shift_name") or "").strip()
+            or (shift.get("name") if shift else None)
+            or None
+        )
+        return {
+            **row,
+            "person_name": person.get("name"),
+            "person_code": person.get("code"),
+            "equipment_name": eq_name,
+            "equipment_code": eq.get("code"),
+            "work_order_code": wo.get("code"),
+            "work_order_name": wo.get("name"),
+            "work_order_label": wo_label or None,
+            "order_code": order.get("code"),
+            "order_name": order.get("name"),
+            "order_due_date": order.get("due_date"),
+            "product_display": product,
+            "applicant_name": applicant,
+            "confirmer_name": confirmer,
+            "shift_family_id": fam,
+            "shift_name": shift_name,
+            "status_label": {
+                "pending": "待确认",
+                "confirmed": "已确认",
+                "rejected": "已驳回",
+            }.get(row.get("status") or "", row.get("status") or ""),
+            "link_type_label": {
+                "work_order": "工单",
+                "product": "产品",
+            }.get(row.get("link_type") or "", row.get("link_type") or ""),
+        }
+
+    def _resolve_shop_floor_link(
+        self, payload: dict[str, Any]
+    ) -> tuple[str, str | None, str | None, str, str | None]:
+        """挂接：工单（可选 id 或手写）或产品。返回 link_type, wo_id, order_id, product, wo_label。"""
+        wo_id = (payload.get("work_order_id") or "").strip() or None
+        wo_label = (payload.get("work_order_label") or "").strip() or None
+        product = (payload.get("product") or "").strip()
+        link_type = (payload.get("link_type") or "").strip() or None
+
+        if link_type == "product" or (not wo_id and not wo_label and product):
+            if not product:
+                raise ValidationException("请选择或填写产品")
+            return "product", None, None, product, None
+
+        if wo_id:
+            wo = self._wo_map().get(wo_id)
+            if not wo:
+                raise NotFoundException("工单不存在")
+            if wo.get("status") == "cancelled":
+                raise ValidationException("工单已作废，不能挂接")
+            return (
+                "work_order",
+                wo_id,
+                wo.get("order_id"),
+                product or (wo.get("product") or ""),
+                f"{wo.get('code') or ''} · {wo.get('name') or ''}".strip(" ·"),
+            )
+        if wo_label:
+            return "work_order", None, None, product, wo_label
+        if product:
+            return "product", None, None, product, None
+        raise ValidationException("请选择或填写工单，或填写产品")
+
+    def person_shift_window(
+        self, person_id: str, *, work_date: str | None = None
+    ) -> dict[str, Any]:
+        """取人员当日班次起止；无排班则 found=False，由前端让用户自填。"""
+        with self._lock:
+            day = (work_date or _planning_today().isoformat())[:10]
+            if not person_id or person_id not in self._person_map():
+                raise ValidationException("请选择作业人员")
+            fam = self._person_roster_family_on_day_unlocked(person_id, day)
+            shift = self._active_shift_for_family(fam) if fam else None
+            if not shift:
+                return {
+                    "found": False,
+                    "work_date": day,
+                    "start_time": None,
+                    "end_time": None,
+                    "shift_name": None,
+                    "shift_family_id": None,
+                    "message": "未找到当日班次，请自行填写起止时间",
+                }
+            return {
+                "found": True,
+                "work_date": day,
+                "start_time": (shift.get("start_time") or "08:00")[:5],
+                "end_time": (shift.get("end_time") or "16:00")[:5],
+                "shift_name": shift.get("name"),
+                "shift_family_id": fam,
+                "message": None,
+            }
+
+    @staticmethod
+    def _hours_from_range(start_time: str | None, end_time: str | None) -> float:
+        """HH:MM → 工时；跨午夜按跨日计。"""
+        if not start_time or not end_time:
+            return 0.0
+        try:
+            sh, sm = [int(x) for x in start_time[:5].split(":")]
+            eh, em = [int(x) for x in end_time[:5].split(":")]
+        except (TypeError, ValueError):
+            return 0.0
+        start_m = sh * 60 + sm
+        end_m = eh * 60 + em
+        if end_m <= start_m:
+            end_m += 24 * 60
+        return round((end_m - start_m) / 60.0, 2)
+
+    def list_shop_floor_reports(
+        self,
+        *,
+        work_date: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            self._ensure_shop_floor_reports_unlocked()
+            rows = list(self._data.get("shop_floor_reports") or [])
+            d0 = (date_from or work_date or "")[:10] or None
+            d1 = (date_to or work_date or date_from or "")[:10] or None
+            if work_date and not date_from and not date_to:
+                d0 = d1 = work_date[:10]
+            if d0 and d1:
+                rows = [
+                    r
+                    for r in rows
+                    if d0 <= (r.get("work_date") or "")[:10] <= d1
+                ]
+            elif d0:
+                rows = [r for r in rows if (r.get("work_date") or "")[:10] == d0]
+            if status:
+                rows = [r for r in rows if r.get("status") == status]
+            rows.sort(
+                key=lambda r: (
+                    (r.get("work_date") or ""),
+                    (r.get("submitted_at") or ""),
+                    r.get("id") or "",
+                ),
+                reverse=True,
+            )
+            items = [self._enrich_shop_floor_report(r) for r in rows]
+            pending_n = sum(1 for r in (self._data.get("shop_floor_reports") or []) if r.get("status") == "pending")
+            confirmed_n = sum(
+                1 for r in (self._data.get("shop_floor_reports") or []) if r.get("status") == "confirmed"
+            )
+            day_pending = sum(1 for r in items if r.get("status") == "pending")
+            day_confirmed = sum(1 for r in items if r.get("status") == "confirmed")
+            products: list[str] = []
+            seen_p: set[str] = set()
+            for w in self._data.get("work_orders") or []:
+                p = (w.get("product") or "").strip()
+                if p and p not in seen_p:
+                    seen_p.add(p)
+                    products.append(p)
+            for o in self._data.get("orders") or []:
+                p = (o.get("product") or "").strip()
+                if p and p not in seen_p:
+                    seen_p.add(p)
+                    products.append(p)
+            for r in self._data.get("shop_floor_reports") or []:
+                p = (r.get("product") or "").strip()
+                if p and p not in seen_p:
+                    seen_p.add(p)
+                    products.append(p)
+            resources = deepcopy(self._data.get("resources") or [])
+            shifts = [
+                {
+                    "family_id": s.get("family_id"),
+                    "name": s.get("name"),
+                    "start_time": s.get("start_time"),
+                    "end_time": s.get("end_time"),
+                    "status": s.get("status"),
+                }
+                for s in (self._data.get("shifts") or [])
+                if s.get("status") == "active"
+            ]
+            return {
+                "kpis": [
+                    {
+                        "title": "报工条数",
+                        "value": len(items),
+                    },
+                    {"title": "待确认", "value": day_pending},
+                    {"title": "已确认", "value": day_confirmed},
+                    {"title": "全局待确认", "value": pending_n},
+                    {"title": "全局已确认", "value": confirmed_n},
+                ],
+                "items": items,
+                "persons": deepcopy(self._data.get("persons") or []),
+                "equipments": deepcopy(self._data.get("equipments") or []),
+                "templates": deepcopy(self._data.get("templates") or []),
+                "resources": resources,
+                "shifts": shifts,
+                "product_options": products,
+                "work_orders": [
+                    self._enrich_work_order(w)
+                    for w in (self._data.get("work_orders") or [])
+                    if w.get("status") != "cancelled"
+                ],
+                "settings": self._ensure_shop_floor_settings_unlocked(),
+                "date_from": d0,
+                "date_to": d1,
+                "today": _planning_today().isoformat(),
+            }
+
+    def _submit_shop_floor_report_unlocked(self, payload: dict[str, Any]) -> dict[str, Any]:
+        process_name = (payload.get("process_name") or "").strip()
+        if not process_name:
+            tpl_id = (payload.get("template_id") or "").strip()
+            tpl = next((t for t in (self._data.get("templates") or []) if t["id"] == tpl_id), None)
+            if tpl:
+                process_name = tpl.get("name") or ""
+                payload = {**payload, "template_id": tpl_id}
+        if not process_name:
+            raise ValidationException("请填写或选择工序")
+
+        person_id = (payload.get("person_id") or "").strip()
+        if not person_id or person_id not in self._person_map():
+            raise ValidationException("请选择作业人员")
+
+        qty = float(payload.get("qty") or 0)
+        if qty <= 0:
+            raise ValidationException("完成数量须大于 0")
+
+        start_time = (payload.get("start_time") or "").strip()[:5] or None
+        end_time = (payload.get("end_time") or "").strip()[:5] or None
+        hours = float(payload.get("hours") or 0)
+        if hours <= 0 and start_time and end_time:
+            hours = self._hours_from_range(start_time, end_time)
+        if hours < 0:
+            raise ValidationException("工时不能为负")
+
+        equipment_id = (payload.get("equipment_id") or "").strip() or None
+        equipment_name = (payload.get("equipment_name") or "").strip() or None
+        if equipment_id:
+            eq = next((e for e in (self._data.get("equipments") or []) if e["id"] == equipment_id), None)
+            if not eq:
+                # 当作手写名称（前端可能把名称塞进 id 槽）
+                if not equipment_name:
+                    equipment_name = equipment_id
+                equipment_id = None
+            elif eq.get("status") == "disabled":
+                raise ValidationException("设备已停用")
+            else:
+                equipment_name = eq.get("name") or equipment_name
+
+        link_type, wo_id, order_id, product, wo_label = self._resolve_shop_floor_link(payload)
+        work_date = (payload.get("work_date") or _planning_today().isoformat())[:10]
+        today = _planning_today()
+        settings = self._ensure_shop_floor_settings_unlocked()
+        backfill_days = int(settings.get("history_backfill_days") or 7)
+        try:
+            work_d = date.fromisoformat(work_date)
+        except ValueError as exc:
+            raise ValidationException("报工日期无效") from exc
+        if work_d > today:
+            raise ValidationException("不能提交未来日期的报工")
+        is_backfill = work_d < today
+        if is_backfill and (today - work_d).days > backfill_days:
+            raise ValidationException(f"仅允许补报近 {backfill_days} 天内的历史报工")
+        now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        applicant = (payload.get("submitted_by") or payload.get("applicant_name") or "").strip()
+        applicant_uid = payload.get("submitted_by_user_id")
+        if applicant_uid is not None and applicant_uid != "":
+            try:
+                applicant_uid = int(applicant_uid)
+            except (TypeError, ValueError):
+                applicant_uid = None
+        else:
+            applicant_uid = None
+        if not applicant:
+            person_fallback = self._person_map().get(person_id) or {}
+            applicant = (person_fallback.get("name") or "").strip() or "现场"
+        fam = self._person_roster_family_on_day_unlocked(person_id, work_date)
+        shift = self._active_shift_for_family(fam) if fam else None
+        rid = self._next_id("shop_floor_report", "sfr")
+        row = {
+            "id": rid,
+            "work_date": work_date,
+            "status": "pending",
+            "link_type": link_type,
+            "work_order_id": wo_id,
+            "work_order_label": wo_label,
+            "order_id": order_id,
+            "product": product,
+            "process_name": process_name,
+            "template_id": (payload.get("template_id") or "").strip() or None,
+            "qty": qty,
+            "hours": hours,
+            "start_time": start_time,
+            "end_time": end_time,
+            "person_id": person_id,
+            "shift_family_id": fam,
+            "shift_name": (shift.get("name") if shift else None),
+            "equipment_id": equipment_id,
+            "equipment_name": equipment_name,
+            "note": (payload.get("note") or "").strip(),
+            "submitted_at": now,
+            "submitted_by": applicant,
+            "submitted_by_user_id": applicant_uid,
+            "is_backfill": is_backfill,
+            "reviewed_at": None,
+            "reviewed_by": None,
+            "reviewed_by_user_id": None,
+            "review_note": "",
+        }
+        self._data["shop_floor_reports"].append(row)
+        person = self._person_map().get(person_id) or {}
+        verb = "历史补报" if is_backfill else "生产日报提交"
+        self._append_event(
+            applicant or person.get("name") or "现场",
+            process_name,
+            f"{verb} · {work_date} · {qty:g} 件（待确认）· 作业人 {person.get('name') or ''}",
+        )
+        return self._enrich_shop_floor_report(row)
+
+    def submit_shop_floor_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            self._ensure_shop_floor_reports_unlocked()
+            return self._submit_shop_floor_report_unlocked(payload)
+
+    def submit_shop_floor_reports_batch(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """一人多行：同一 person_id / work_date，多道工序/工单/产品。"""
+        with self._lock:
+            self._ensure_shop_floor_reports_unlocked()
+            person_id = (payload.get("person_id") or "").strip()
+            work_date = (payload.get("work_date") or _planning_today().isoformat())[:10]
+            rows = payload.get("rows") or []
+            if not isinstance(rows, list) or not rows:
+                raise ValidationException("请至少填写一行报工")
+            applicant = (payload.get("submitted_by") or payload.get("applicant_name") or "").strip()
+            applicant_uid = payload.get("submitted_by_user_id")
+            created = []
+            for i, raw in enumerate(rows):
+                if not isinstance(raw, dict):
+                    raise ValidationException(f"第 {i + 1} 行格式无效")
+                item = {
+                    **raw,
+                    "person_id": person_id,
+                    "work_date": work_date,
+                }
+                if applicant and not item.get("submitted_by"):
+                    item["submitted_by"] = applicant
+                if applicant_uid is not None and item.get("submitted_by_user_id") in (None, ""):
+                    item["submitted_by_user_id"] = applicant_uid
+                try:
+                    created.append(self._submit_shop_floor_report_unlocked(item))
+                except (ValidationException, NotFoundException) as exc:
+                    detail = getattr(exc, "detail", None) or getattr(exc, "message", None) or str(exc)
+                    raise ValidationException(f"第 {i + 1} 行：{detail}") from exc
+            return {"ok": True, "count": len(created), "items": created}
+
+    def review_shop_floor_report(
+        self,
+        report_id: str,
+        *,
+        action: str,
+        reviewer: str | None = None,
+        reviewer_user_id: int | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            return self._review_shop_floor_report_unlocked(
+                report_id,
+                action=action,
+                reviewer=reviewer,
+                reviewer_user_id=reviewer_user_id,
+                note=note,
+            )
+
+    def review_shop_floor_reports_batch(
+        self,
+        *,
+        ids: list[str],
+        action: str,
+        reviewer: str | None = None,
+        reviewer_user_id: int | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """批量确认/驳回待审报工。"""
+        with self._lock:
+            raw_ids = [str(i).strip() for i in (ids or []) if str(i).strip()]
+            # 保序去重
+            seen: set[str] = set()
+            uniq: list[str] = []
+            for i in raw_ids:
+                if i in seen:
+                    continue
+                seen.add(i)
+                uniq.append(i)
+            if not uniq:
+                raise ValidationException("请选择要处理的报工")
+            action_norm = (action or "").strip().lower()
+            if action_norm not in ("confirm", "reject"):
+                raise ValidationException("action 须为 confirm 或 reject")
+            review_note = (note or "").strip()
+            if action_norm == "reject" and not review_note:
+                raise ValidationException("驳回时请填写原因，方便作业人修改")
+            items: list[dict[str, Any]] = []
+            for rid in uniq:
+                items.append(
+                    self._review_shop_floor_report_unlocked(
+                        rid,
+                        action=action_norm,
+                        reviewer=reviewer,
+                        reviewer_user_id=reviewer_user_id,
+                        note=review_note,
+                    )
+                )
+            verb = "确认" if action_norm == "confirm" else "驳回"
+            return {
+                "ok": True,
+                "action": action_norm,
+                "count": len(items),
+                "items": items,
+                "message": f"已全部{verb} {len(items)} 条",
+            }
+
+    def _review_shop_floor_report_unlocked(
+        self,
+        report_id: str,
+        *,
+        action: str,
+        reviewer: str | None = None,
+        reviewer_user_id: int | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        self._ensure_shop_floor_reports_unlocked()
+        row = next(
+            (r for r in self._data["shop_floor_reports"] if r.get("id") == report_id),
+            None,
+        )
+        if not row:
+            raise NotFoundException("日报不存在")
+        if row.get("status") != "pending":
+            raise ValidationException("仅待确认的日报可审核")
+        action = (action or "").strip().lower()
+        if action not in ("confirm", "reject"):
+            raise ValidationException("action 须为 confirm 或 reject")
+        review_note = (note or "").strip()
+        if action == "reject" and not review_note:
+            raise ValidationException("驳回时请填写原因，方便作业人修改")
+        now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        row["status"] = "confirmed" if action == "confirm" else "rejected"
+        row["reviewed_at"] = now
+        row["reviewed_by"] = (reviewer or "").strip() or "车间主任"
+        try:
+            row["reviewed_by_user_id"] = (
+                int(reviewer_user_id) if reviewer_user_id is not None else None
+            )
+        except (TypeError, ValueError):
+            row["reviewed_by_user_id"] = None
+        row["review_note"] = review_note
+        person = self._person_map().get(row.get("person_id") or "") or {}
+        verb = "确认" if action == "confirm" else "驳回"
+        self._append_event(
+            row["reviewed_by"],
+            row.get("process_name") or "",
+            f"生产日报{verb} · {person.get('name') or ''} · {row.get('work_date')}",
+        )
+        return self._enrich_shop_floor_report(row)
+
+    def delete_shop_floor_report(self, report_id: str) -> dict[str, Any]:
+        with self._lock:
+            self._ensure_shop_floor_reports_unlocked()
+            logs = self._data["shop_floor_reports"]
+            idx = next((i for i, r in enumerate(logs) if r.get("id") == report_id), None)
+            if idx is None:
+                raise NotFoundException("日报不存在")
+            row = logs[idx]
+            if row.get("status") == "confirmed":
+                raise ValidationException("已确认日报不能删除")
+            if row.get("status") not in ("pending", "rejected"):
+                raise ValidationException("仅待确认或已驳回的日报可删除")
+            today = _planning_today()
+            work_date = (row.get("work_date") or "")[:10]
+            try:
+                work_d = date.fromisoformat(work_date)
+            except ValueError as exc:
+                raise ValidationException("报工日期无效") from exc
+            settings = self._ensure_shop_floor_settings_unlocked()
+            backfill_days = int(settings.get("history_backfill_days") or 7)
+            if work_d > today:
+                raise ValidationException("报工日期异常")
+            if (today - work_d).days > backfill_days:
+                raise ValidationException(
+                    f"仅允许删除近 {backfill_days} 天内未确认的报工"
+                )
+            logs.pop(idx)
+            return {"ok": True, "deleted_id": report_id}
+
+    def _ensure_shop_floor_finished_unlocked(self) -> None:
+        if not isinstance(self._data.get("shop_floor_finished"), list):
+            self._data["shop_floor_finished"] = []
+        seq = self._data.setdefault("_seq", {})
+        if "shop_floor_finished" not in seq:
+            seq["shop_floor_finished"] = len(self._data["shop_floor_finished"])
+
+    def _iter_days(self, date_from: str, date_to: str) -> list[str]:
+        d0 = date.fromisoformat(date_from[:10])
+        d1 = date.fromisoformat(date_to[:10])
+        if d1 < d0:
+            d0, d1 = d1, d0
+        out: list[str] = []
+        cur = d0
+        while cur <= d1:
+            out.append(cur.isoformat())
+            cur += timedelta(days=1)
+            if len(out) > 93:
+                break
+        return out
+
+    def shop_floor_dashboard_stats(
+        self,
+        *,
+        date_from: str,
+        date_to: str,
+        last_process_by_product: dict[str, str] | None = None,
+        product_hints: list[dict[str, Any]] | None = None,
+        resource_id: str | None = None,
+        process_name: str | None = None,
+        equipment_key: str | None = None,
+        shift_family_id: str | None = None,
+    ) -> dict[str, Any]:
+        """每日报工看板：应报/已报（仅排班）、工序/班次/设备分布、成品建议与已确认。"""
+        with self._lock:
+            self._ensure_shop_floor_reports_unlocked()
+            self._ensure_shop_floor_finished_unlocked()
+            d0 = (date_from or _planning_today().isoformat())[:10]
+            d1 = (date_to or d0)[:10]
+            days = self._iter_days(d0, d1)
+            last_map = {
+                (k or "").strip(): (v or "").strip()
+                for k, v in (last_process_by_product or {}).items()
+                if k
+            }
+            hints: list[dict[str, str]] = []
+            seen_hint: set[str] = set()
+            for h in product_hints or []:
+                name = (h.get("product") or "").strip()
+                if not name or name in seen_hint:
+                    continue
+                seen_hint.add(name)
+                hints.append(
+                    {
+                        "product": name,
+                        "code": (h.get("code") or "").strip(),
+                        "last_process": (h.get("last_process") or last_map.get(name) or "").strip(),
+                    }
+                )
+            if not hints and last_map:
+                for name, last in last_map.items():
+                    if name in seen_hint:
+                        continue
+                    # last_map 含编码别名时可能重复；仅作兜底
+                    seen_hint.add(name)
+                    hints.append({"product": name, "code": "", "last_process": last})
+            fam_names: dict[str, str] = {}
+            for s in self._data.get("shifts") or []:
+                fid = s.get("family_id")
+                if fid and (s.get("status") == "active" or fid not in fam_names):
+                    fam_names[str(fid)] = s.get("name") or str(fid)
+
+            persons = [p for p in (self._data.get("persons") or []) if p.get("status") != "disabled"]
+            if resource_id:
+                persons = [p for p in persons if p.get("resource_id") == resource_id]
+            person_map = {p["id"]: p for p in persons}
+
+            settings = self._ensure_shop_floor_settings_unlocked()
+            grace_minutes = int(settings.get("off_shift_grace_minutes") or 30)
+            now_dt = datetime.now()
+
+            # 应报池：有排班且非请假的人×日；催报仅统计 duty=due（下班+宽限后）
+            roster_slots: list[dict[str, Any]] = []
+            for day in days:
+                for p in persons:
+                    cell = self._roster_cell_for_day_unlocked(p["id"], day, fam_names)
+                    if cell.get("kind") != "shift":
+                        continue
+                    fam = cell.get("shift_family_id")
+                    if shift_family_id and fam != shift_family_id:
+                        continue
+                    duty = self._slot_duty_state_unlocked(
+                        work_date=day,
+                        shift_family_id=fam,
+                        now=now_dt,
+                        grace_minutes=grace_minutes,
+                    )
+                    roster_slots.append(
+                        {
+                            "person_id": p["id"],
+                            "person_name": p.get("name"),
+                            "work_date": day,
+                            "shift_family_id": fam,
+                            "shift_name": cell.get("shift_name"),
+                            "resource_id": p.get("resource_id"),
+                            "duty_state": duty,
+                        }
+                    )
+
+            # 催报分母：仅已到催报点；未开班/宽限内不进未报
+            expected_slots = [s for s in roster_slots if s.get("duty_state") == "due"]
+            not_started_n = sum(1 for s in roster_slots if s.get("duty_state") == "not_started")
+            open_n = sum(1 for s in roster_slots if s.get("duty_state") == "open")
+
+            rows = [
+                r
+                for r in (self._data.get("shop_floor_reports") or [])
+                if d0 <= (r.get("work_date") or "")[:10] <= d1
+                and r.get("status") in ("pending", "confirmed")
+            ]
+            # 筛选
+            filtered: list[dict] = []
+            for r in rows:
+                pid = r.get("person_id")
+                if pid not in person_map and resource_id:
+                    continue
+                if resource_id and (person_map.get(pid) or {}).get("resource_id") != resource_id:
+                    continue
+                proc = (r.get("process_name") or "").strip()
+                if process_name and proc != process_name:
+                    continue
+                eq = (r.get("equipment_name") or r.get("equipment_id") or "").strip()
+                if equipment_key and eq != equipment_key and r.get("equipment_id") != equipment_key:
+                    continue
+                day = (r.get("work_date") or "")[:10]
+                fam = self._person_roster_family_on_day_unlocked(pid or "", day)
+                if shift_family_id and fam != shift_family_id:
+                    continue
+                filtered.append({**r, "_shift_family_id": fam, "_shift_name": fam_names.get(fam or "")})
+
+            reported_keys = {
+                f"{(r.get('work_date') or '')[:10]}::{r.get('person_id')}"
+                for r in filtered
+            }
+            expected_n = len(expected_slots)
+            reported_n = sum(
+                1
+                for s in expected_slots
+                if f"{s['work_date']}::{s['person_id']}" in reported_keys
+            )
+            unreported = [
+                s
+                for s in expected_slots
+                if f"{s['work_date']}::{s['person_id']}" not in reported_keys
+            ]
+            by_shift_att: dict[str, dict[str, Any]] = {}
+            for s in expected_slots:
+                key = s.get("shift_family_id") or "unknown"
+                bucket = by_shift_att.setdefault(
+                    key,
+                    {
+                        "shift_family_id": s.get("shift_family_id"),
+                        "shift_name": s.get("shift_name") or "未排班次",
+                        "expected": 0,
+                        "reported": 0,
+                    },
+                )
+                bucket["expected"] += 1
+                if f"{s['work_date']}::{s['person_id']}" in reported_keys:
+                    bucket["reported"] += 1
+            for b in by_shift_att.values():
+                b["unreported"] = max(0, b["expected"] - b["reported"])
+
+            by_process: dict[str, float] = {}
+            by_shift_process: dict[str, dict[str, float]] = {}
+            by_equipment: dict[str, float] = {}
+            for r in filtered:
+                qty = float(r.get("qty") or 0)
+                proc = (r.get("process_name") or "未命名工序").strip()
+                by_process[proc] = by_process.get(proc, 0) + qty
+                sn = r.get("_shift_name") or "未排班"
+                sp = by_shift_process.setdefault(sn, {})
+                sp[proc] = sp.get(proc, 0) + qty
+                eq = (r.get("equipment_name") or "").strip() or "未填设备"
+                by_equipment[eq] = by_equipment.get(eq, 0) + qty
+
+            # 成品建议：末道工序（按产品）当日/区间已确认数量
+            finished_suggest: dict[str, dict[str, Any]] = {}
+            for r in filtered:
+                if r.get("status") != "confirmed":
+                    continue
+                product = (r.get("product") or r.get("product_display") or "").strip()
+                if not product:
+                    continue
+                last = last_map.get(product)
+                proc = (r.get("process_name") or "").strip()
+                if not last or proc != last:
+                    continue
+                day = (r.get("work_date") or "")[:10]
+                key = f"{day}::{product}"
+                bucket = finished_suggest.setdefault(
+                    key,
+                    {
+                        "work_date": day,
+                        "product": product,
+                        "last_process": last,
+                        "suggested_qty": 0.0,
+                    },
+                )
+                bucket["suggested_qty"] += float(r.get("qty") or 0)
+
+            confirms = [
+                c
+                for c in (self._data.get("shop_floor_finished") or [])
+                if d0 <= (c.get("work_date") or "")[:10] <= d1
+            ]
+            # 无末道报工时也给出产品行，建议量默认 0，便于人工填写
+            seed_days = days if len(days) <= 14 else [d1]
+            for day in seed_days:
+                for h in hints:
+                    key = f"{day}::{h['product']}"
+                    if key in finished_suggest:
+                        if not finished_suggest[key].get("last_process") and h.get("last_process"):
+                            finished_suggest[key]["last_process"] = h["last_process"]
+                        continue
+                    finished_suggest[key] = {
+                        "work_date": day,
+                        "product": h["product"],
+                        "last_process": h.get("last_process") or "",
+                        "suggested_qty": 0.0,
+                    }
+            for c in confirms:
+                day = (c.get("work_date") or "")[:10]
+                product = (c.get("product") or "").strip()
+                if not day or not product:
+                    continue
+                key = f"{day}::{product}"
+                if key not in finished_suggest:
+                    finished_suggest[key] = {
+                        "work_date": day,
+                        "product": product,
+                        "last_process": last_map.get(product) or "",
+                        "suggested_qty": float(c.get("suggested_qty") or 0),
+                    }
+
+            confirmed_qty = sum(
+                float(c.get("confirmed_qty") or 0) for c in confirms if c.get("status") == "confirmed"
+            )
+            suggest_list = sorted(
+                finished_suggest.values(),
+                key=lambda x: (x.get("work_date") or "", x.get("product") or ""),
+            )
+            for s in suggest_list:
+                s["suggested_qty"] = round(float(s.get("suggested_qty") or 0), 2)
+                matched = next(
+                    (
+                        c
+                        for c in confirms
+                        if (c.get("work_date") or "")[:10] == s["work_date"]
+                        and (c.get("product") or "") == s["product"]
+                        and c.get("status") == "confirmed"
+                    ),
+                    None,
+                )
+                s["confirmed_qty"] = float(matched["confirmed_qty"]) if matched else None
+                s["confirm_id"] = matched.get("id") if matched else None
+
+            process_total = round(sum(by_process.values()), 2)
+            return {
+                "date_from": d0,
+                "date_to": d1,
+                "settings": dict(settings),
+                "attendance": {
+                    "expected": expected_n,
+                    "reported": reported_n,
+                    "unreported": max(0, expected_n - reported_n),
+                    "rostered": len(roster_slots),
+                    "not_started": not_started_n,
+                    "within_grace_or_running": open_n,
+                    "grace_minutes": grace_minutes,
+                    "note": (
+                        f"应报=已过下班+宽限（{grace_minutes} 分钟）的人×日；"
+                        f"未开班 {not_started_n}、进行中/宽限内 {open_n} 不计入未报；"
+                        "无排班不计入应报。"
+                    ),
+                    "by_shift": sorted(
+                        by_shift_att.values(),
+                        key=lambda x: x.get("shift_name") or "",
+                    ),
+                    "unreported_list": unreported[:100],
+                },
+                "report_count": len(filtered),
+                "process_total_qty": process_total,
+                "by_process": [
+                    {"name": k, "qty": round(v, 2)}
+                    for k, v in sorted(by_process.items(), key=lambda x: -x[1])
+                ],
+                "by_shift_process": [
+                    {
+                        "shift_name": sn,
+                        "processes": [
+                            {"name": pn, "qty": round(q, 2)}
+                            for pn, q in sorted(procs.items(), key=lambda x: -x[1])
+                        ],
+                    }
+                    for sn, procs in sorted(by_shift_process.items(), key=lambda x: x[0])
+                ],
+                "by_equipment": [
+                    {"name": k, "qty": round(v, 2)}
+                    for k, v in sorted(by_equipment.items(), key=lambda x: -x[1])
+                ][:12],
+                "finished": {
+                    "confirmed_qty": round(confirmed_qty, 2),
+                    "suggested": suggest_list,
+                    "confirms": deepcopy(confirms),
+                    "product_options": hints,
+                    "note": "",
+                },
+            }
+
+    def confirm_shop_floor_finished(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """成品产量确认：程序建议 + 人改数确认。"""
+        with self._lock:
+            self._ensure_shop_floor_finished_unlocked()
+            work_date = (payload.get("work_date") or "")[:10]
+            product = (payload.get("product") or "").strip()
+            if not work_date or not product:
+                raise ValidationException("请指定日期与产品")
+            qty = float(payload.get("confirmed_qty") if payload.get("confirmed_qty") is not None else 0)
+            if qty < 0:
+                raise ValidationException("成品数量不能为负")
+            suggested = float(payload.get("suggested_qty") or 0)
+            now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            rows = self._data["shop_floor_finished"]
+            existing = next(
+                (
+                    r
+                    for r in rows
+                    if (r.get("work_date") or "")[:10] == work_date
+                    and (r.get("product") or "") == product
+                    and r.get("status") == "confirmed"
+                ),
+                None,
+            )
+            if existing:
+                existing["confirmed_qty"] = qty
+                existing["suggested_qty"] = suggested
+                existing["confirmed_by"] = (payload.get("confirmed_by") or "").strip() or "车间主任"
+                existing["confirmed_at"] = now
+                existing["note"] = (payload.get("note") or "").strip()
+                self._persist_unlocked()
+                return deepcopy(existing)
+            rid = self._next_id("shop_floor_finished", "sff")
+            row = {
+                "id": rid,
+                "work_date": work_date,
+                "product": product,
+                "suggested_qty": suggested,
+                "confirmed_qty": qty,
+                "status": "confirmed",
+                "confirmed_by": (payload.get("confirmed_by") or "").strip() or "车间主任",
+                "confirmed_at": now,
+                "note": (payload.get("note") or "").strip(),
+            }
+            rows.append(row)
+            self._persist_unlocked()
+            return deepcopy(row)
+
+    def shop_floor_progress(self) -> dict[str, Any]:
+        """进度看板：现场按工单/产品；老板按订单上卷。产量均来自已确认日报；距交期为日历天。"""
+        with self._lock:
+            self._ensure_shop_floor_reports_unlocked()
+            today = _planning_today()
+            confirmed = [
+                r for r in (self._data.get("shop_floor_reports") or []) if r.get("status") == "confirmed"
+            ]
+            # key -> bucket；key = wo:{id} | wolabel:{text} | product:{name}
+            buckets: dict[str, dict[str, Any]] = {}
+            by_order: dict[str, dict[str, Any]] = {}
+            unlinked_n = 0
+
+            def _touch(
+                store: dict[str, dict[str, Any]],
+                key: str,
+                *,
+                meta: dict[str, Any],
+                proc: str,
+                qty: float,
+                hours: float,
+                person_id: str | None,
+                submitted: str,
+            ) -> None:
+                bucket = store.setdefault(
+                    key,
+                    {
+                        **meta,
+                        "processes": {},
+                        "last_report_at": "",
+                        "last_person_id": None,
+                        "last_process": "",
+                    },
+                )
+                for k, v in meta.items():
+                    if v and not bucket.get(k):
+                        bucket[k] = v
+                pinfo = bucket["processes"].setdefault(
+                    proc, {"process_name": proc, "qty": 0.0, "hours": 0.0}
+                )
+                pinfo["qty"] += qty
+                pinfo["hours"] += hours
+                if submitted >= (bucket["last_report_at"] or ""):
+                    bucket["last_report_at"] = submitted
+                    bucket["last_person_id"] = person_id
+                    bucket["last_process"] = proc
+
+            for r in confirmed:
+                proc = (r.get("process_name") or "").strip() or "未命名工序"
+                qty = float(r.get("qty") or 0)
+                hours = float(r.get("hours") or 0)
+                submitted = r.get("submitted_at") or r.get("work_date") or ""
+                person_id = r.get("person_id")
+                wo_id = (r.get("work_order_id") or "").strip() or None
+                wo_label = (r.get("work_order_label") or "").strip() or None
+                product = (r.get("product") or "").strip()
+                link_type = (r.get("link_type") or "").strip()
+                wo = self._wo_map().get(wo_id or "") or {}
+                oid = (r.get("order_id") or wo.get("order_id") or "").strip() or None
+                order = self._order_map().get(oid or "") or {}
+
+                if wo_id or (link_type == "work_order" and wo_label):
+                    key = f"wo:{wo_id}" if wo_id else f"wolabel:{wo_label}"
+                    _touch(
+                        buckets,
+                        key,
+                        meta={
+                            "link_type": "work_order",
+                            "work_order_id": wo_id,
+                            "work_order_code": wo.get("code"),
+                            "work_order_name": wo.get("name"),
+                            "work_order_label": wo_label
+                            or (
+                                f"{wo.get('code')} · {wo.get('name')}".strip(" ·")
+                                if wo
+                                else None
+                            ),
+                            "product": product or (wo.get("product") or "") or (order.get("product") or ""),
+                            "due_date": (self._effective_due(wo, order) or "")[:10] or None,
+                            "wo_status": wo.get("status"),
+                            "order_id": oid,
+                        },
+                        proc=proc,
+                        qty=qty,
+                        hours=hours,
+                        person_id=person_id,
+                        submitted=submitted,
+                    )
+                elif product:
+                    _touch(
+                        buckets,
+                        f"product:{product}",
+                        meta={
+                            "link_type": "product",
+                            "work_order_id": None,
+                            "work_order_code": None,
+                            "work_order_name": None,
+                            "work_order_label": None,
+                            "product": product,
+                            "due_date": None,
+                            "wo_status": None,
+                            "order_id": None,
+                        },
+                        proc=proc,
+                        qty=qty,
+                        hours=hours,
+                        person_id=person_id,
+                        submitted=submitted,
+                    )
+                else:
+                    unlinked_n += 1
+                    continue
+
+                if oid:
+                    _touch(
+                        by_order,
+                        oid,
+                        meta={"order_id": oid},
+                        proc=proc,
+                        qty=qty,
+                        hours=hours,
+                        person_id=person_id,
+                        submitted=submitted,
+                    )
+                else:
+                    unlinked_n += 1
+
+            # 主数据工单也上榜（无日报的也能看交期），取消的除外
+            for wo in self._data.get("work_orders") or []:
+                if wo.get("status") == "cancelled":
+                    continue
+                wid = wo.get("id")
+                if not wid:
+                    continue
+                key = f"wo:{wid}"
+                if key in buckets:
+                    continue
+                order = self._order_map().get(wo.get("order_id") or "") or {}
+                buckets[key] = {
+                    "link_type": "work_order",
+                    "work_order_id": wid,
+                    "work_order_code": wo.get("code"),
+                    "work_order_name": wo.get("name"),
+                    "work_order_label": f"{wo.get('code') or ''} · {wo.get('name') or ''}".strip(" ·"),
+                    "product": (wo.get("product") or "") or (order.get("product") or ""),
+                    "due_date": (self._effective_due(wo, order) or "")[:10] or None,
+                    "wo_status": wo.get("status"),
+                    "order_id": wo.get("order_id"),
+                    "processes": {},
+                    "last_report_at": "",
+                    "last_person_id": None,
+                    "last_process": "",
+                }
+
+            def _days_to_due(due: str | None) -> int | None:
+                if not due:
+                    return None
+                try:
+                    return (date.fromisoformat(due[:10]) - today).days
+                except ValueError:
+                    return None
+
+            items = []
+            for key, bucket in buckets.items():
+                due = (bucket.get("due_date") or "")[:10] or None
+                processes = sorted(
+                    bucket["processes"].values(),
+                    key=lambda x: -float(x.get("qty") or 0),
+                )
+                last_person = self._person_map().get(bucket.get("last_person_id") or "") or {}
+                total_qty = sum(float(p.get("qty") or 0) for p in processes)
+                link_type = bucket.get("link_type") or "work_order"
+                items.append(
+                    {
+                        "id": key,
+                        "link_type": link_type,
+                        "link_type_label": "工单" if link_type == "work_order" else "产品",
+                        "work_order_id": bucket.get("work_order_id"),
+                        "work_order_code": bucket.get("work_order_code"),
+                        "work_order_name": bucket.get("work_order_name"),
+                        "work_order_label": bucket.get("work_order_label"),
+                        "product": bucket.get("product") or "",
+                        "due_date": due,
+                        "days_to_due": _days_to_due(due),
+                        "wo_status": bucket.get("wo_status"),
+                        "total_confirmed_qty": total_qty,
+                        "processes": processes,
+                        "current_process": bucket.get("last_process") or None,
+                        "current_holder": last_person.get("name"),
+                        "last_report_at": bucket.get("last_report_at") or None,
+                        "has_reports": bool(processes),
+                    }
+                )
+
+            items.sort(
+                key=lambda x: (
+                    0 if x.get("has_reports") else 1,
+                    0 if x.get("link_type") == "work_order" else 1,
+                    x.get("days_to_due") if x.get("days_to_due") is not None else 9999,
+                    x.get("work_order_code") or x.get("product") or "",
+                )
+            )
+
+            # 订单视图：主数据订单 + 已确认日报上卷（工单挂订单后汇总）
+            order_items = []
+            for order in self._data.get("orders") or []:
+                oid = order.get("id")
+                if not oid:
+                    continue
+                bucket = by_order.get(oid) or {
+                    "processes": {},
+                    "last_report_at": "",
+                    "last_person_id": None,
+                    "last_process": "",
+                }
+                due = (order.get("due_date") or "")[:10] or None
+                processes = sorted(
+                    bucket["processes"].values(),
+                    key=lambda x: -float(x.get("qty") or 0),
+                )
+                last_person = self._person_map().get(bucket.get("last_person_id") or "") or {}
+                wo_codes = [
+                    (w.get("code") or "")
+                    for w in (self._data.get("work_orders") or [])
+                    if w.get("order_id") == oid and w.get("status") != "cancelled"
+                ]
+                order_items.append(
+                    {
+                        "id": f"order:{oid}",
+                        "order_id": oid,
+                        "order_code": order.get("code"),
+                        "order_name": order.get("name"),
+                        "product": order.get("product") or "",
+                        "due_date": due,
+                        "days_to_due": _days_to_due(due),
+                        "order_status": order.get("status"),
+                        "work_order_count": len([c for c in wo_codes if c]),
+                        "work_order_codes": [c for c in wo_codes if c][:8],
+                        "total_confirmed_qty": sum(float(p.get("qty") or 0) for p in processes),
+                        "processes": processes,
+                        "current_process": bucket.get("last_process") or None,
+                        "current_holder": last_person.get("name"),
+                        "last_report_at": bucket.get("last_report_at") or None,
+                        "has_reports": bool(processes),
+                    }
+                )
+
+            order_items.sort(
+                key=lambda x: (
+                    0 if x.get("has_reports") else 1,
+                    x.get("days_to_due") if x.get("days_to_due") is not None else 9999,
+                    x.get("order_code") or "",
+                )
+            )
+
+            return {
+                "as_of": today.isoformat(),
+                "note": "报工挂工单/产品；订单进度由工单上卷。距交期为日历天；产量仅计已确认日报。",
+                "items": items,
+                "work_orders": items,
+                "orders": order_items,
+                "unlinked_product_reports": unlinked_n,
+            }
+
+    def shop_floor_progress_detail(
+        self,
+        *,
+        scope: str,
+        target_id: str,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        """订单/工单/产品进度下钻：粗略摘要 + 日×班×设备×人×工序明细。"""
+        with self._lock:
+            self._ensure_shop_floor_reports_unlocked()
+            self._ensure_shop_floor_finished_unlocked()
+            today = _planning_today()
+            scope_n = (scope or "").strip().lower()
+            tid = (target_id or "").strip()
+            if scope_n not in ("order", "work_order", "product") or not tid:
+                raise ValidationException("请指定 scope=order|work_order|product 与 id")
+
+            if tid.startswith("order:"):
+                tid = tid[6:]
+            elif tid.startswith("wo:"):
+                tid = tid[3:]
+            elif tid.startswith("product:"):
+                tid = tid[8:]
+
+            d0 = (date_from or "")[:10] or None
+            d1 = (date_to or "")[:10] or None
+            if d0 and not d1:
+                d1 = d0
+            if d1 and not d0:
+                d0 = d1
+
+            order = self._order_map().get(tid) if scope_n == "order" else {}
+            wo = self._wo_map().get(tid) if scope_n == "work_order" else {}
+            if scope_n == "order" and not order:
+                raise NotFoundException("订单不存在")
+            if scope_n == "work_order" and not wo:
+                raise NotFoundException("工单不存在")
+
+            product_name = ""
+            if scope_n == "product":
+                product_name = tid
+            elif scope_n == "order":
+                product_name = (order.get("product") or "").strip()
+            else:
+                parent = self._order_map().get(wo.get("order_id") or "") or {}
+                product_name = (
+                    (wo.get("product") or "").strip() or (parent.get("product") or "").strip()
+                )
+
+            child_wos: list[dict[str, Any]] = []
+            if scope_n == "order":
+                child_wos = [
+                    w
+                    for w in (self._data.get("work_orders") or [])
+                    if w.get("order_id") == tid and w.get("status") != "cancelled"
+                ]
+            elif scope_n == "work_order":
+                child_wos = [wo] if wo else []
+
+            def _report_matches(r: dict[str, Any]) -> bool:
+                r_wo = self._wo_map().get(r.get("work_order_id") or "") or {}
+                r_oid = (r.get("order_id") or r_wo.get("order_id") or "").strip() or None
+                r_wid = (r.get("work_order_id") or "").strip() or None
+                r_prod = (
+                    (r.get("product") or "").strip()
+                    or (r_wo.get("product") or "").strip()
+                    or ((self._order_map().get(r_oid or "") or {}).get("product") or "").strip()
+                )
+                if scope_n == "order":
+                    return r_oid == tid
+                if scope_n == "work_order":
+                    if r_wid == tid:
+                        return True
+                    label = (r.get("work_order_label") or "").strip()
+                    if label and wo:
+                        expect = f"{wo.get('code') or ''} · {wo.get('name') or ''}".strip(" ·")
+                        return bool(expect) and label == expect
+                    return False
+                return bool(product_name) and r_prod == product_name
+
+            rows = [r for r in (self._data.get("shop_floor_reports") or []) if _report_matches(r)]
+            if d0 and d1:
+                rows = [r for r in rows if d0 <= (r.get("work_date") or "")[:10] <= d1]
+            if status:
+                rows = [r for r in rows if r.get("status") == status]
+
+            lines: list[dict[str, Any]] = []
+            by_day: dict[str, dict[str, Any]] = {}
+            by_shift: dict[str, dict[str, Any]] = {}
+            by_equipment: dict[str, dict[str, Any]] = {}
+            by_person: dict[str, dict[str, Any]] = {}
+            processes: dict[str, dict[str, Any]] = {}
+            person_ids: set[str] = set()
+            equipment_keys: set[str] = set()
+            shift_keys: set[str] = set()
+            confirmed_qty = 0.0
+            pending_qty = 0.0
+            rejected_qty = 0.0
+            last_report_at = ""
+            last_person_id: str | None = None
+            last_process = ""
+
+            def _bump(store: dict[str, dict[str, Any]], key: str, meta: dict[str, Any], qty: float, conf: bool) -> None:
+                b = store.setdefault(key, {**meta, "qty": 0.0, "confirmed_qty": 0.0, "count": 0})
+                for k, v in meta.items():
+                    if v and not b.get(k):
+                        b[k] = v
+                b["qty"] += qty
+                b["count"] += 1
+                if conf:
+                    b["confirmed_qty"] += qty
+
+            for r in rows:
+                enriched = self._enrich_shop_floor_report(r)
+                work_date = (enriched.get("work_date") or "")[:10]
+                person_id = (enriched.get("person_id") or "").strip() or None
+                fam = (
+                    self._person_roster_family_on_day_unlocked(person_id, work_date)
+                    if person_id and work_date
+                    else None
+                )
+                shift = self._active_shift_for_family(fam) if fam else None
+                shift_name = (shift or {}).get("name") or "未排班"
+                shift_fid = fam or "none"
+                eq_name = (enriched.get("equipment_name") or "").strip() or "未挂设备"
+                eq_id = (enriched.get("equipment_id") or "").strip() or eq_name
+                person_name = (enriched.get("person_name") or person_id or "未知") 
+                proc = (enriched.get("process_name") or "").strip() or "未命名工序"
+                qty = float(enriched.get("qty") or 0)
+                st = enriched.get("status") or ""
+                conf = st == "confirmed"
+                submitted = enriched.get("submitted_at") or work_date or ""
+
+                if person_id:
+                    person_ids.add(person_id)
+                equipment_keys.add(eq_id)
+                shift_keys.add(shift_fid)
+
+                if conf:
+                    confirmed_qty += qty
+                    pinfo = processes.setdefault(proc, {"process_name": proc, "qty": 0.0, "hours": 0.0})
+                    pinfo["qty"] += qty
+                    pinfo["hours"] += float(enriched.get("hours") or 0)
+                    if submitted >= last_report_at:
+                        last_report_at = submitted
+                        last_person_id = person_id
+                        last_process = proc
+                elif st == "pending":
+                    pending_qty += qty
+                elif st == "rejected":
+                    rejected_qty += qty
+
+                if work_date:
+                    _bump(by_day, work_date, {"date": work_date}, qty, conf)
+                _bump(
+                    by_shift,
+                    shift_fid,
+                    {"shift_family_id": fam, "shift_name": shift_name},
+                    qty,
+                    conf,
+                )
+                _bump(
+                    by_equipment,
+                    eq_id,
+                    {"equipment_id": enriched.get("equipment_id"), "equipment_name": eq_name},
+                    qty,
+                    conf,
+                )
+                if person_id:
+                    _bump(
+                        by_person,
+                        person_id,
+                        {"person_id": person_id, "person_name": person_name},
+                        qty,
+                        conf,
+                    )
+
+                lines.append(
+                    {
+                        "id": enriched.get("id"),
+                        "work_date": work_date,
+                        "shift_family_id": fam,
+                        "shift_name": shift_name,
+                        "equipment_id": enriched.get("equipment_id"),
+                        "equipment_name": eq_name,
+                        "person_id": person_id,
+                        "person_name": person_name,
+                        "process_name": proc,
+                        "qty": qty,
+                        "hours": float(enriched.get("hours") or 0),
+                        "status": st,
+                        "status_label": enriched.get("status_label"),
+                        "submitted_at": enriched.get("submitted_at"),
+                        "reviewed_at": enriched.get("reviewed_at"),
+                        "reviewed_by": enriched.get("reviewed_by"),
+                        "review_note": enriched.get("review_note"),
+                        "note": enriched.get("note"),
+                        "work_order_id": enriched.get("work_order_id"),
+                        "work_order_label": enriched.get("work_order_label"),
+                        "order_id": enriched.get("order_id") or (order.get("id") if order else None),
+                        "product": enriched.get("product_display") or product_name,
+                        "start_time": enriched.get("start_time"),
+                        "end_time": enriched.get("end_time"),
+                    }
+                )
+
+            lines.sort(
+                key=lambda x: (
+                    x.get("work_date") or "",
+                    x.get("shift_name") or "",
+                    x.get("equipment_name") or "",
+                    x.get("person_name") or "",
+                    x.get("submitted_at") or "",
+                ),
+                reverse=True,
+            )
+
+            # 成品确认（按产品名对上）
+            finished_confirmed = 0.0
+            if product_name:
+                for f in self._data.get("shop_floor_finished") or []:
+                    if f.get("status") != "confirmed":
+                        continue
+                    if (f.get("product") or "").strip() != product_name:
+                        continue
+                    fd = (f.get("work_date") or "")[:10]
+                    if d0 and d1 and not (d0 <= fd <= d1):
+                        continue
+                    finished_confirmed += float(f.get("confirmed_qty") or 0)
+
+            # 近 7 日 / 今日（仅已确认）
+            day7 = (today - timedelta(days=6)).isoformat()
+            qty_7d = 0.0
+            days_with_qty = 0
+            today_qty = 0.0
+            last_produce_date: str | None = None
+            for day_key, b in by_day.items():
+                cq = float(b.get("confirmed_qty") or 0)
+                if cq <= 0:
+                    continue
+                if day_key >= day7:
+                    qty_7d += cq
+                    days_with_qty += 1
+                if day_key == today.isoformat():
+                    today_qty = cq
+                if last_produce_date is None or day_key > last_produce_date:
+                    last_produce_date = day_key
+            avg_7d = round(qty_7d / max(days_with_qty, 1), 1) if qty_7d else 0.0
+
+            due: str | None = None
+            plan_qty: float | None = None
+            status_label = None
+            title = ""
+            code = None
+            name = None
+            if scope_n == "order":
+                due = (order.get("due_date") or "")[:10] or None
+                plan_candidate = order.get("plan_qty") or order.get("qty") or order.get("quantity")
+                plan_qty = float(plan_candidate) if plan_candidate not in (None, "") else None
+                status_label = order.get("status")
+                code = order.get("code")
+                name = order.get("name")
+                title = f"{code or ''} · {product_name or name or ''}".strip(" ·")
+            elif scope_n == "work_order":
+                parent = self._order_map().get(wo.get("order_id") or "") or {}
+                due = (self._effective_due(wo, parent) or "")[:10] or None
+                plan_candidate = wo.get("plan_qty") or parent.get("plan_qty")
+                plan_qty = float(plan_candidate) if plan_candidate not in (None, "") else None
+                status_label = wo.get("status")
+                code = wo.get("code")
+                name = wo.get("name")
+                title = f"{code or ''} · {name or product_name or ''}".strip(" ·")
+            else:
+                title = product_name or tid
+
+            try:
+                days_to_due = (date.fromisoformat(due) - today).days if due else None
+            except ValueError:
+                days_to_due = None
+
+            progress_pct = (
+                round(min(100.0, confirmed_qty / plan_qty * 100), 1)
+                if plan_qty and plan_qty > 0
+                else None
+            )
+            last_person = self._person_map().get(last_person_id or "") or {}
+            last_dt = self._parse_report_dt(last_report_at)
+            now = datetime.now()
+            silent_hours = (
+                round((now - last_dt).total_seconds() / 3600, 1) if last_dt else None
+            )
+
+            # 图表全量区间：工序开工 → 交期/完工/最近产出（进行中含今天）
+            wo_ids = {str(w.get("id")) for w in child_wos if w.get("id")}
+            start_cands: list[str] = []
+            end_cands: list[str] = []
+            if wo_ids:
+                for op in self._data.get("operations") or []:
+                    if str(op.get("work_order_id") or "") not in wo_ids:
+                        continue
+                    ps = (op.get("plan_start") or "")[:10]
+                    pe = (op.get("plan_end") or "")[:10]
+                    if ps:
+                        start_cands.append(ps)
+                    if pe:
+                        end_cands.append(pe)
+            for day_key in by_day:
+                start_cands.append(day_key)
+                end_cands.append(day_key)
+            if due:
+                end_cands.append(due)
+            if last_produce_date:
+                end_cands.append(last_produce_date)
+            producing = (status_label or "") in (
+                "producing",
+                "open",
+                "released",
+                "in_progress",
+                "pending",
+            )
+            if producing or not end_cands:
+                end_cands.append(today.isoformat())
+            period_start = min(start_cands) if start_cands else (d0 or today.isoformat())
+            period_end = max(end_cands) if end_cands else (d1 or today.isoformat())
+            if period_start > period_end:
+                period_start, period_end = period_end, period_start
+
+            def _sorted_buckets(store: dict[str, dict[str, Any]], prefer_date: bool = False) -> list[dict[str, Any]]:
+                vals = list(store.values())
+                if prefer_date:
+                    vals.sort(key=lambda x: x.get("date") or "", reverse=True)
+                else:
+                    vals.sort(key=lambda x: -float(x.get("confirmed_qty") or x.get("qty") or 0))
+                return vals
+
+            return {
+                "as_of": today.isoformat(),
+                "scope": scope_n,
+                "id": tid,
+                "date_from": d0,
+                "date_to": d1,
+                "note": "粗略看交期与累计；明细按日–班–设备–人–工序。正式产量以已确认为准。",
+                "summary": {
+                    "scope": scope_n,
+                    "id": tid,
+                    "title": title,
+                    "code": code,
+                    "name": name,
+                    "product": product_name or None,
+                    "status": status_label,
+                    "due_date": due,
+                    "days_to_due": days_to_due,
+                    "period_start": period_start,
+                    "period_end": period_end,
+                    "plan_qty": plan_qty,
+                    "progress_pct": progress_pct,
+                    "total_confirmed_qty": confirmed_qty,
+                    "total_pending_qty": pending_qty,
+                    "total_rejected_qty": rejected_qty,
+                    "finished_confirmed_qty": finished_confirmed,
+                    "finished_gap": (
+                        round(max(0.0, (plan_qty or 0) - finished_confirmed), 1)
+                        if plan_qty
+                        else None
+                    ),
+                    "avg_7d": avg_7d,
+                    "today_qty": today_qty,
+                    "last_produce_date": last_produce_date,
+                    "person_count": len(person_ids),
+                    "equipment_count": len(equipment_keys),
+                    "shift_count": len([k for k in shift_keys if k != "none"]),
+                    "report_count": len(lines),
+                    "processes": sorted(processes.values(), key=lambda x: -float(x.get("qty") or 0)),
+                    "current_process": last_process or None,
+                    "current_holder": last_person.get("name"),
+                    "last_report_at": last_report_at or None,
+                    "silent_hours": silent_hours,
+                    "work_orders": [
+                        {
+                            "id": w.get("id"),
+                            "code": w.get("code"),
+                            "name": w.get("name"),
+                            "product": w.get("product"),
+                            "status": w.get("status"),
+                            "due_date": (w.get("due_date") or "")[:10] or None,
+                        }
+                        for w in child_wos
+                    ],
+                },
+                "by_day": _sorted_buckets(by_day, prefer_date=True),
+                "by_shift": _sorted_buckets(by_shift),
+                "by_equipment": _sorted_buckets(by_equipment),
+                "by_person": _sorted_buckets(by_person),
+                "lines": lines,
+            }
+
+    @staticmethod
+    def _parse_report_dt(raw: str | None) -> datetime | None:
+        if not raw:
+            return None
+        text = str(raw).strip().replace("T", " ").replace("Z", "")
+        for candidate, fmt in (
+            (text[:19], "%Y-%m-%d %H:%M:%S"),
+            (text[:16], "%Y-%m-%d %H:%M"),
+            (text[:10], "%Y-%m-%d"),
+        ):
+            try:
+                return datetime.strptime(candidate, fmt)
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
+    def _age_label(minutes: int) -> str:
+        if minutes < 60:
+            return f"{minutes} 分钟"
+        hours = minutes / 60
+        if hours < 24:
+            return f"{round(hours, 1)} 小时"
+        return f"{round(hours / 24, 1)} 天"
+
+    def shop_floor_cockpit(
+        self,
+        *,
+        near_days: int = 3,
+        active_limit: int = 30,
+        view: str = "manager",
+        silent_hours: float = 8,
+        pending_timeout_hours: float = 2,
+        attendance_target_rate: float = 80,
+    ) -> dict[str, Any]:
+        """全局看板：指挥条 + 必办 + 交期/在制/脉搏（报工确认口径）。"""
+        near = max(0, min(int(near_days or 3), 14))
+        limit = max(5, min(int(active_limit or 30), 100))
+        role = (view or "manager").strip().lower()
+        if role not in ("manager", "director"):
+            role = "manager"
+        silent_h = max(1.0, float(silent_hours or 8))
+        pending_h = max(0.5, float(pending_timeout_hours or 2))
+        target_rate = max(0.0, min(100.0, float(attendance_target_rate or 80)))
+        progress = self.shop_floor_progress()
+        as_of = (progress.get("as_of") or _planning_today().isoformat())[:10]
+        day_stats = self.shop_floor_dashboard_stats(date_from=as_of, date_to=as_of)
+        now = datetime.now()
+
+        with self._lock:
+            self._ensure_shop_floor_reports_unlocked()
+            self._ensure_shop_floor_finished_unlocked()
+            reports = list(self._data.get("shop_floor_reports") or [])
+            pending_rows = [r for r in reports if r.get("status") == "pending"]
+            rejected_rows = [r for r in reports if r.get("status") == "rejected"]
+            pending_n = len(pending_rows)
+            rejected_n = len(rejected_rows)
+
+            last_eq: dict[str, str] = {}
+            for r in sorted(
+                (x for x in reports if x.get("status") == "confirmed"),
+                key=lambda x: x.get("submitted_at") or x.get("work_date") or "",
+            ):
+                eq = (r.get("equipment_name") or "").strip()
+                if not eq:
+                    continue
+                wo_id = (r.get("work_order_id") or "").strip()
+                product = (r.get("product") or r.get("product_display") or "").strip()
+                wo_label = (r.get("work_order_label") or "").strip()
+                if wo_id:
+                    last_eq[f"wo:{wo_id}"] = eq
+                elif wo_label:
+                    last_eq[f"wolabel:{wo_label}"] = eq
+                if product:
+                    last_eq[f"product:{product}"] = eq
+
+            att = day_stats.get("attendance") or {}
+            finished = day_stats.get("finished") or {}
+            suggest_pending = [
+                s
+                for s in (finished.get("suggested") or [])
+                if s.get("confirmed_qty") is None
+                and float(s.get("suggested_qty") or 0) > 0
+            ]
+            unreported_list = list(att.get("unreported_list") or [])
+
+            orders = list(progress.get("orders") or [])
+            overdue = [o for o in orders if isinstance(o.get("days_to_due"), int) and o["days_to_due"] < 0]
+            near_list = [
+                o
+                for o in orders
+                if isinstance(o.get("days_to_due"), int) and 0 <= o["days_to_due"] <= near
+            ]
+            ok_n = len(orders) - len(overdue) - len(near_list)
+            overdue.sort(key=lambda o: o.get("days_to_due") if o.get("days_to_due") is not None else 0)
+
+            active: list[dict[str, Any]] = []
+            for it in progress.get("work_orders") or []:
+                if not it.get("has_reports"):
+                    continue
+                if it.get("wo_status") == "done":
+                    continue
+                key = it.get("id") or ""
+                last_at = it.get("last_report_at")
+                last_dt = self._parse_report_dt(last_at)
+                silent_hours_val = None
+                if last_dt:
+                    silent_hours_val = round((now - last_dt).total_seconds() / 3600, 1)
+                days = it.get("days_to_due")
+                is_overdue = isinstance(days, int) and days < 0
+                is_near = isinstance(days, int) and 0 <= days <= near
+                is_silent = silent_hours_val is not None and silent_hours_val >= silent_h
+                if is_overdue:
+                    tone = "red"
+                elif is_near or is_silent:
+                    tone = "yellow"
+                else:
+                    tone = "green"
+                proc_name = (it.get("current_process") or "").strip() or "未报工序"
+                done_qty = float(it.get("total_confirmed_qty") or 0)
+                # 主数据暂无计划量字段时 plan 为空；有则算进度
+                plan_raw = it.get("plan_qty")
+                plan_qty = float(plan_raw) if plan_raw not in (None, "") else None
+                progress_pct = (
+                    round(min(100.0, done_qty / plan_qty * 100), 1)
+                    if plan_qty and plan_qty > 0
+                    else None
+                )
+                active.append(
+                    {
+                        "id": key,
+                        "link_type": it.get("link_type"),
+                        "link_type_label": it.get("link_type_label"),
+                        "work_order_label": it.get("work_order_label")
+                        or it.get("work_order_code")
+                        or it.get("product"),
+                        "product": it.get("product"),
+                        "current_process": it.get("current_process"),
+                        "current_holder": it.get("current_holder"),
+                        "equipment_name": last_eq.get(key) or None,
+                        "total_confirmed_qty": done_qty,
+                        "plan_qty": plan_qty,
+                        "progress_pct": progress_pct,
+                        "due_date": it.get("due_date"),
+                        "days_to_due": days,
+                        "last_report_at": last_at,
+                        "silent_hours": silent_hours_val,
+                        "lane": proc_name,
+                        "tone": tone,
+                        "wo_status": it.get("wo_status"),
+                    }
+                )
+            active.sort(
+                key=lambda x: (
+                    {"red": 0, "yellow": 1, "green": 2}.get(x.get("tone") or "green", 9),
+                    x.get("days_to_due") if isinstance(x.get("days_to_due"), int) else 9999,
+                    -(x.get("silent_hours") or 0),
+                )
+            )
+            silent_active = [a for a in active if (a.get("silent_hours") or 0) >= silent_h]
+            green_active_n = sum(1 for a in active if a.get("tone") == "green")
+            active_out = active[:limit]
+
+            # —— 异常/必办事件（全量；首屏截 Top5）——
+            actions: list[dict[str, Any]] = []
+            _action_seq = 0
+
+            def _push_action(
+                *,
+                type_: str,
+                level: str,
+                title: str,
+                object_label: str,
+                age_minutes: int,
+                suggested_action: str,
+                link: str,
+                owner_role: str,
+            ) -> None:
+                nonlocal _action_seq
+                _action_seq += 1
+                actions.append(
+                    {
+                        "id": f"{type_}-{_action_seq}",
+                        "type": type_,
+                        "level": level,
+                        "title": title,
+                        "object_label": object_label,
+                        "age_minutes": max(0, int(age_minutes)),
+                        "age_label": self._age_label(max(0, int(age_minutes))),
+                        "suggested_action": suggested_action,
+                        "link": link,
+                        "owner_role": owner_role,
+                    }
+                )
+
+            for o in overdue:
+                age_m = abs(int(o.get("days_to_due") or 0)) * 24 * 60
+                label = f"{o.get('order_code') or ''} · {o.get('product') or ''}".strip(" ·")
+                oid = (o.get("order_id") or str(o.get("id") or "").replace("order:", "")).strip()
+                _push_action(
+                    type_="order_overdue",
+                    level="error",
+                    title="订单已逾期",
+                    object_label=label or "逾期订单",
+                    age_minutes=age_m,
+                    suggested_action="跟交期",
+                    link=(
+                        f"/production-progress/analysis?focus=order&id={oid}"
+                        if oid
+                        else "/production-progress/analysis"
+                    ),
+                    owner_role="manager",
+                )
+
+            for a in silent_active:
+                sh = float(a.get("silent_hours") or 0)
+                _push_action(
+                    type_="wip_silent",
+                    level="warning",
+                    title="在制静默",
+                    object_label=str(a.get("work_order_label") or a.get("product") or a.get("id")),
+                    age_minutes=int(sh * 60),
+                    suggested_action="查卡点",
+                    link="/production-progress/cockpit",
+                    owner_role="manager",
+                )
+
+            for u in unreported_list[:80]:
+                label = f"{u.get('person_name') or u.get('person_id')} · {u.get('shift_name') or '班次'}"
+                _push_action(
+                    type_="unreported",
+                    level="warning",
+                    title="今日应报未报",
+                    object_label=label,
+                    age_minutes=0,
+                    suggested_action="催报",
+                    link="/production-progress/daily",
+                    owner_role="director",
+                )
+
+            timed_out_pending = 0
+            for r in pending_rows:
+                dt = self._parse_report_dt(r.get("submitted_at") or r.get("work_date"))
+                mins = int((now - dt).total_seconds() / 60) if dt else 0
+                person = self._person_map().get(r.get("person_id") or "") or {}
+                who = person.get("name") or r.get("person_id") or "作业人"
+                proc = (r.get("process_name") or "").strip() or "报工"
+                if dt and mins >= pending_h * 60:
+                    timed_out_pending += 1
+                    _push_action(
+                        type_="pending_timeout",
+                        level="warning",
+                        title="报工待确认超时",
+                        object_label=f"{who} · {proc}",
+                        age_minutes=mins,
+                        suggested_action="去确认",
+                        link="/production-progress/daily?status=pending",
+                        owner_role="director",
+                    )
+            if pending_n > 0 and timed_out_pending == 0:
+                _push_action(
+                    type_="pending_timeout",
+                    level="warning",
+                    title="报工待确认",
+                    object_label=f"{pending_n} 条待主任确认",
+                    age_minutes=0,
+                    suggested_action="去确认",
+                    link="/production-progress/daily?status=pending",
+                    owner_role="director",
+                )
+
+            for r in rejected_rows[:40]:
+                person = self._person_map().get(r.get("person_id") or "") or {}
+                who = person.get("name") or r.get("person_id") or "作业人"
+                note = (r.get("review_note") or "").strip()
+                obj = f"{who} · {(r.get('process_name') or '报工')}"
+                if note:
+                    obj = f"{obj}（{note[:24]}）"
+                _push_action(
+                    type_="rejected_open",
+                    level="error",
+                    title="报工已驳回",
+                    object_label=obj,
+                    age_minutes=0,
+                    suggested_action="督促重报",
+                    link="/production-progress/daily?status=rejected",
+                    owner_role="director",
+                )
+
+            for s in suggest_pending[:40]:
+                _push_action(
+                    type_="finished_pending",
+                    level="info",
+                    title="成品待确认",
+                    object_label=f"{s.get('product')} · 建议 {s.get('suggested_qty')}",
+                    age_minutes=0,
+                    suggested_action="确认成品",
+                    link="/production-progress/daily",
+                    owner_role="director",
+                )
+
+            level_rank = {"error": 0, "warning": 1, "info": 2}
+            if role == "director":
+                type_boost = {
+                    "unreported": 0,
+                    "pending_timeout": 1,
+                    "rejected_open": 2,
+                    "finished_pending": 3,
+                    "wip_silent": 4,
+                    "order_overdue": 5,
+                    "order_near_behind": 6,
+                }
+            else:
+                type_boost = {
+                    "order_overdue": 0,
+                    "order_near_behind": 1,
+                    "wip_silent": 2,
+                    "rejected_open": 3,
+                    "pending_timeout": 4,
+                    "unreported": 5,
+                    "finished_pending": 6,
+                }
+            actions.sort(
+                key=lambda x: (
+                    type_boost.get(x.get("type") or "", 9),
+                    level_rank.get(x.get("level") or "info", 9),
+                    -(x.get("age_minutes") or 0),
+                )
+            )
+
+            # 兼容旧 alerts
+            alerts: list[dict[str, Any]] = []
+            unreported = int(att.get("unreported") or 0)
+            if unreported > 0:
+                alerts.append(
+                    {
+                        "type": "unreported",
+                        "level": "warning",
+                        "title": "今日应报未报",
+                        "count": unreported,
+                        "hint": "有排班未提交报工",
+                        "link": "/production-progress/daily",
+                    }
+                )
+            if pending_n > 0:
+                alerts.append(
+                    {
+                        "type": "pending",
+                        "level": "warning",
+                        "title": "报工待确认",
+                        "count": pending_n,
+                        "hint": "主任确认后才计入进度",
+                        "link": "/production-progress/daily",
+                    }
+                )
+            if rejected_n > 0:
+                alerts.append(
+                    {
+                        "type": "rejected",
+                        "level": "error",
+                        "title": "报工已驳回",
+                        "count": rejected_n,
+                        "hint": "需按驳回原因改正后重报",
+                        "link": "/production-progress/daily",
+                    }
+                )
+            if suggest_pending:
+                alerts.append(
+                    {
+                        "type": "finished_pending",
+                        "level": "info",
+                        "title": "成品待确认",
+                        "count": len(suggest_pending),
+                        "hint": "末道产量建议尚未人工确认",
+                        "link": "/production-progress/daily",
+                    }
+                )
+            if overdue:
+                alerts.append(
+                    {
+                        "type": "overdue",
+                        "level": "error",
+                        "title": "订单已逾期",
+                        "count": len(overdue),
+                        "hint": "优先看交期与在制责任人",
+                        "link": "/production-progress/analysis",
+                    }
+                )
+
+            expected = int(att.get("expected") or 0)
+            reported = int(att.get("reported") or 0)
+            rate = round(reported / expected * 100, 1) if expected else None
+            top_overdue = overdue[0] if overdue else None
+            red_headline = (
+                f"{top_overdue.get('order_code')} · {top_overdue.get('product') or ''} · "
+                f"{top_overdue.get('current_holder') or '未指认'}"
+                if top_overdue
+                else "无逾期订单"
+            )
+            yellow_count = len(near_list) + len(silent_active)
+            yellow_headline = f"{len(near_list)} 临期 · {len(silent_active)} 静默超 {silent_h:g}h"
+            rate_txt = f"{rate}%" if rate is not None else "—"
+            green_headline = f"报工率 {rate_txt}（目标 {target_rate:g}%）"
+
+            brief = lambda o: {
+                "order_code": o.get("order_code"),
+                "order_name": o.get("order_name"),
+                "product": o.get("product"),
+                "due_date": o.get("due_date"),
+                "days_to_due": o.get("days_to_due"),
+                "current_holder": o.get("current_holder"),
+                "current_process": o.get("current_process"),
+            }
+
+            # —— 交期驾驶舱：分桶 + 进度行 ——
+            behind_pct = 70.0
+            order_raw = {
+                o.get("id"): o for o in (self._data.get("orders") or []) if o.get("id")
+            }
+            bucket = {"overdue": 0, "d3": 0, "d7": 0, "later": 0, "no_due": 0}
+            due_rows: list[dict[str, Any]] = []
+            for o in orders:
+                days = o.get("days_to_due")
+                if not isinstance(days, int):
+                    bucket["no_due"] += 1
+                elif days < 0:
+                    bucket["overdue"] += 1
+                elif days <= 3:
+                    bucket["d3"] += 1
+                elif days <= 7:
+                    bucket["d7"] += 1
+                else:
+                    bucket["later"] += 1
+
+                done_qty = float(o.get("total_confirmed_qty") or 0)
+                oid = o.get("order_id") or (str(o.get("id") or "").replace("order:", ""))
+                raw = order_raw.get(oid) or {}
+                plan_candidate = raw.get("plan_qty") or raw.get("qty") or raw.get("quantity")
+                plan_qty = (
+                    float(plan_candidate)
+                    if plan_candidate not in (None, "")
+                    else None
+                )
+                progress_pct = (
+                    round(min(100.0, done_qty / plan_qty * 100), 1)
+                    if plan_qty and plan_qty > 0
+                    else None
+                )
+                last_dt = self._parse_report_dt(o.get("last_report_at"))
+                silent_h_ord = (
+                    round((now - last_dt).total_seconds() / 3600, 1) if last_dt else None
+                )
+                is_overdue = isinstance(days, int) and days < 0
+                is_near = isinstance(days, int) and 0 <= days <= near
+                is_silent = silent_h_ord is not None and silent_h_ord >= silent_h
+                behind = False
+                if (is_overdue or is_near) and progress_pct is not None:
+                    behind = progress_pct < behind_pct
+                elif is_overdue and done_qty <= 0:
+                    behind = True
+                tags: list[str] = []
+                if is_overdue:
+                    tags.append("逾期")
+                elif is_near:
+                    tags.append("临期")
+                if is_silent:
+                    tags.append("静默")
+                if behind:
+                    tags.append("落后")
+                due_rows.append(
+                    {
+                        "order_id": oid,
+                        "order_code": o.get("order_code"),
+                        "order_name": o.get("order_name"),
+                        "product": o.get("product"),
+                        "due_date": o.get("due_date"),
+                        "days_to_due": days,
+                        "plan_qty": plan_qty,
+                        "done_qty": done_qty,
+                        "progress_pct": progress_pct,
+                        "behind": behind,
+                        "current_process": o.get("current_process"),
+                        "current_holder": o.get("current_holder"),
+                        "silent_hours": silent_h_ord,
+                        "last_report_at": o.get("last_report_at"),
+                        "risk_tags": tags,
+                        "risk_tag": tags[0] if tags else None,
+                    }
+                )
+            due_rows.sort(
+                key=lambda x: (
+                    0 if "逾期" in (x.get("risk_tags") or []) else 1,
+                    0 if "落后" in (x.get("risk_tags") or []) else 1,
+                    0 if "临期" in (x.get("risk_tags") or []) else 1,
+                    x.get("days_to_due") if isinstance(x.get("days_to_due"), int) else 9999,
+                )
+            )
+            # 列表默认：逾期+临期优先，补足到 8
+            due_focus = [
+                r
+                for r in due_rows
+                if "逾期" in (r.get("risk_tags") or []) or "临期" in (r.get("risk_tags") or [])
+            ]
+            if len(due_focus) < 8:
+                for r in due_rows:
+                    if r not in due_focus:
+                        due_focus.append(r)
+                    if len(due_focus) >= 8:
+                        break
+
+            for r in due_rows:
+                if not r.get("behind"):
+                    continue
+                if "逾期" not in (r.get("risk_tags") or []) and "临期" not in (r.get("risk_tags") or []):
+                    continue
+                label = f"{r.get('order_code') or ''} · {r.get('product') or ''}".strip(" ·")
+                pct = r.get("progress_pct")
+                oid = (r.get("order_id") or "").strip()
+                _push_action(
+                    type_="order_near_behind",
+                    level="warning",
+                    title="交期进度落后",
+                    object_label=f"{label} · {pct}%" if pct is not None else label,
+                    age_minutes=0,
+                    suggested_action="加催",
+                    link=(
+                        f"/production-progress/analysis?focus=order&id={oid}"
+                        if oid
+                        else "/production-progress/analysis"
+                    ),
+                    owner_role="manager",
+                )
+            actions_all = list(actions)
+            actions_all.sort(
+                key=lambda x: (
+                    type_boost.get(x.get("type") or "", 9),
+                    level_rank.get(x.get("level") or "info", 9),
+                    -(x.get("age_minutes") or 0),
+                )
+            )
+            actions_top = actions_all[:5]
+
+            # 近 7 日趋势（工序确认产量 / 成品确认）
+            as_of_d = date.fromisoformat(as_of)
+            finished_rows = list(self._data.get("shop_floor_finished") or [])
+            process_trend: list[dict[str, Any]] = []
+            finished_trend: list[dict[str, Any]] = []
+            for i in range(6, -1, -1):
+                day = (as_of_d - timedelta(days=i)).isoformat()
+                pq = sum(
+                    float(r.get("qty") or 0)
+                    for r in reports
+                    if r.get("status") == "confirmed" and (r.get("work_date") or "")[:10] == day
+                )
+                fq = sum(
+                    float(c.get("confirmed_qty") or 0)
+                    for c in finished_rows
+                    if c.get("status") == "confirmed" and (c.get("work_date") or "")[:10] == day
+                )
+                process_trend.append({"date": day, "label": day[5:], "value": round(pq, 2)})
+                finished_trend.append({"date": day, "label": day[5:], "value": round(fq, 2)})
+
+            # 建议合计用当日成品建议列表（含已确认行的 suggested）
+            suggested_all_today = round(
+                sum(float(s.get("suggested_qty") or 0) for s in (finished.get("suggested") or [])),
+                2,
+            )
+            finished_confirmed = float(finished.get("confirmed_qty") or 0)
+            finished_gap = round(suggested_all_today - finished_confirmed, 2)
+
+            return {
+                "as_of": as_of,
+                "view": role,
+                "note": "进度来自已确认报工，非设备实时采集。静默=太久无新确认报工。",
+                "config": {
+                    "near_days": near,
+                    "silent_hours": silent_h,
+                    "pending_timeout_hours": pending_h,
+                    "attendance_target_rate": target_rate,
+                    "progress_behind_pct": behind_pct,
+                },
+                "command": {
+                    "near_days": near,
+                    "red": {
+                        "count": len(overdue),
+                        "headline": red_headline.strip(" ·"),
+                    },
+                    "yellow": {
+                        "count": yellow_count,
+                        "headline": yellow_headline,
+                        "near_count": len(near_list),
+                        "silent_count": len(silent_active),
+                    },
+                    "green": {
+                        "count": green_active_n,
+                        "headline": green_headline,
+                        "attendance_rate": rate,
+                        "attendance_target_rate": target_rate,
+                    },
+                },
+                "actions": actions_top,
+                "actions_all": actions_all,
+                "alerts_total": len(actions_all),
+                "due": {
+                    "buckets": bucket,
+                    "rows": due_focus,
+                    "all_count": len(due_rows),
+                },
+                "due_risk": {
+                    "near_days": near,
+                    "overdue": len(overdue),
+                    "near": len(near_list),
+                    "ok": max(0, ok_n),
+                    "order_total": len(orders),
+                    "overdue_orders": [brief(o) for o in overdue[:8]],
+                    "near_orders": [brief(o) for o in near_list[:8]],
+                },
+                "active": active_out,
+                "alerts": alerts,
+                "pulse": {
+                    "attendance_expected": expected,
+                    "attendance_reported": reported,
+                    "attendance_unreported": unreported,
+                    "attendance_rate": rate,
+                    "attendance_target_rate": target_rate,
+                    "process_total_qty": day_stats.get("process_total_qty") or 0,
+                    "finished_suggested_qty": suggested_all_today,
+                    "finished_confirmed_qty": finished_confirmed,
+                    "finished_gap": finished_gap,
+                    "pending_reports": pending_n,
+                    "rejected_reports": rejected_n,
+                    "trend": {
+                        "process_qty_7d": process_trend,
+                        "finished_qty_7d": finished_trend,
+                    },
+                },
             }
 
     def start_op(self, op_id: str) -> dict:

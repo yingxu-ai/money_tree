@@ -137,6 +137,131 @@ API_META_OVERLAYS: dict[tuple[str, str], dict[str, str]] = {
         "name": "删除报工记录",
         "permission_code": "scheduling:report:start",
     },
+    ("GET", "/scheduling/shop-floor-reports"): {
+        "name": "生产日报列表",
+        "permission_code": "scheduling:view",
+    },
+    ("GET", "/scheduling/shop-floor-reports/progress"): {
+        "name": "生产日报工单进度",
+        "permission_code": "scheduling:view",
+    },
+    ("POST", "/scheduling/shop-floor-reports"): {
+        "name": "提交生产日报",
+        "permission_code": "scheduling:report:start",
+    },
+    ("POST", "/scheduling/shop-floor-reports/batch"): {
+        "name": "批量提交生产日报",
+        "permission_code": "scheduling:report:start",
+    },
+    ("GET", "/scheduling/shop-floor-reports/shift-hint"): {
+        "name": "生产日报班次提示",
+        "permission_code": "scheduling:view",
+    },
+    ("POST", "/scheduling/shop-floor-reports/{report_id}/review"): {
+        "name": "确认/驳回生产日报",
+        "permission_code": "scheduling:shop_floor:review",
+    },
+    ("DELETE", "/scheduling/shop-floor-reports/{report_id}"): {
+        "name": "删除生产日报",
+        "permission_code": "scheduling:report:start",
+    },
+    # ----- 生产进度（并行菜单，不改排产） -----
+    ("GET", "/production-progress/master"): {
+        "name": "生产进度基础数据",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/processes"): {
+        "name": "生产进度工序列表",
+        "permission_code": "production_progress:view",
+    },
+    ("POST", "/production-progress/processes"): {
+        "name": "新增工序",
+        "permission_code": "production_progress:view",
+    },
+    ("PUT", "/production-progress/processes/{process_id}"): {
+        "name": "更新工序",
+        "permission_code": "production_progress:view",
+    },
+    ("DELETE", "/production-progress/processes/{process_id}"): {
+        "name": "删除工序",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/products"): {
+        "name": "生产进度产品列表",
+        "permission_code": "production_progress:view",
+    },
+    ("POST", "/production-progress/products"): {
+        "name": "新增产品工艺",
+        "permission_code": "production_progress:view",
+    },
+    ("PUT", "/production-progress/products/{product_id}"): {
+        "name": "更新产品工艺",
+        "permission_code": "production_progress:view",
+    },
+    ("DELETE", "/production-progress/products/{product_id}"): {
+        "name": "删除产品",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/work-orders"): {
+        "name": "生产进度工单列表",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/cockpit"): {
+        "name": "生产进度全局看板",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/shop-floor-reports"): {
+        "name": "生产进度日报列表",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/shop-floor-reports/shift-hint"): {
+        "name": "生产进度班次提示",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/shop-floor-reports/progress"): {
+        "name": "生产进度看板",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/shop-floor-reports/progress/detail"): {
+        "name": "生产进度下钻明细",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/shop-floor-reports/stats"): {
+        "name": "生产进度日报统计",
+        "permission_code": "production_progress:view",
+    },
+    ("POST", "/production-progress/shop-floor-reports"): {
+        "name": "生产进度提交报工",
+        "permission_code": "production_progress:report",
+    },
+    ("POST", "/production-progress/shop-floor-reports/batch"): {
+        "name": "生产进度批量报工",
+        "permission_code": "production_progress:report",
+    },
+    ("POST", "/production-progress/shop-floor-reports/finished-confirm"): {
+        "name": "生产进度成品确认",
+        "permission_code": "production_progress:review",
+    },
+    ("GET", "/production-progress/shop-floor-settings"): {
+        "name": "生产进度报工口径配置",
+        "permission_code": "production_progress:view",
+    },
+    ("PUT", "/production-progress/shop-floor-settings"): {
+        "name": "修改生产进度报工口径",
+        "permission_code": "production_progress:review",
+    },
+    ("POST", "/production-progress/shop-floor-reports/review-batch"): {
+        "name": "生产进度日报批量确认",
+        "permission_code": "production_progress:review",
+    },
+    ("POST", "/production-progress/shop-floor-reports/{report_id}/review"): {
+        "name": "生产进度日报确认",
+        "permission_code": "production_progress:review",
+    },
+    ("DELETE", "/production-progress/shop-floor-reports/{report_id}"): {
+        "name": "生产进度删除报工",
+        "permission_code": "production_progress:report",
+    },
 }
 
 

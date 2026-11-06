@@ -22,6 +22,7 @@ def parse_enabled_modules(raw: str | None) -> set[str] | None:
 # 菜单 path → module（与前端 filter 对齐）
 MENU_PATH_MODULE_PREFIXES: list[tuple[str, str]] = [
     ("/scheduling", "scheduling"),
+    ("/production-progress", "production-progress"),
     ("/devices", "equipment-analysis"),
     ("/analysis", "equipment-analysis"),
     ("/tools", "toolbox"),
