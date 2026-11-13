@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from types import SimpleNamespace
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -11,12 +12,13 @@ from app.application.api_permission_service import (
     is_public_api_path,
 )
 from app.auth.context import CurrentUser
-from app.auth.tenant_context import parse_operating_tenant_header
 from app.auth.data_scope import resolve_effective_scope
+from app.auth.tenant_context import parse_operating_tenant_header
 from app.core.database import get_session
 from app.core.exceptions import AuthException, PermissionException
 from app.core.module_guard import assert_module_allowed
 from app.core.security import decode_token
+from app.models.enums import DataScope
 from app.models.system import (
     SysApiPermission,
     SysPermission,
@@ -28,6 +30,45 @@ from app.models.system import (
 )
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+# 现场作业人小程序令牌：仅报工相关
+_MP_WORKER_PERMISSIONS = {
+    "production_progress:view",
+    "production_progress:report",
+}
+
+
+def _mp_worker_current_user(payload: dict) -> CurrentUser:
+    tenant_id = payload.get("tenant_id")
+    person_id = (payload.get("person_id") or "").strip()
+    person_name = (payload.get("person_name") or "").strip() or "现场作业人"
+    person_code = (payload.get("person_code") or "").strip()
+    if tenant_id is None or not person_id:
+        raise AuthException("作业人令牌载荷无效")
+    try:
+        tid = int(tenant_id)
+    except (TypeError, ValueError) as exc:
+        raise AuthException("作业人令牌租户无效") from exc
+    user = SimpleNamespace(
+        id=0,
+        tenant_id=tid,
+        username=f"mp:{person_code or person_id}",
+        display_name=person_name,
+        status="active",
+        dept_id=None,
+        is_deleted=False,
+    )
+    return CurrentUser(
+        user=user,  # type: ignore[arg-type]
+        roles=["mp_worker"],
+        role_names=["现场作业人"],
+        permissions=set(_MP_WORKER_PERMISSIONS),
+        api_permission_ids=set(),
+        data_scope=DataScope.ALL.value,
+        operating_tenant_id=None,
+        person_id=person_id,
+        is_mp_worker=True,
+    )
 
 
 async def get_current_user(
@@ -45,6 +86,13 @@ async def get_current_user(
 
     if payload.get("type") != "access":
         raise AuthException("令牌类型错误")
+
+    if payload.get("kind") == "mp_worker":
+        current = _mp_worker_current_user(payload)
+        request.state.user_id = 0
+        request.state.operating_tenant_id = None
+        request.state.mp_person_id = current.person_id
+        return current
 
     user_id = payload.get("sub")
     if not user_id:

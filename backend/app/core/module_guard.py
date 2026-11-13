@@ -13,6 +13,7 @@ from app.core.security import decode_token
 MODULE_API_PREFIXES: dict[str, list[str]] = {
     "scheduling": ["/scheduling"],
     "production-progress": ["/production-progress"],
+    "progress-analytics": ["/progress-analytics"],
     "equipment-analysis": ["/equipment-analysis"],
     "demo": ["/demo"],
     # 平台侧系统能力（租户开通 SKU 不含此项时不可访问）
@@ -31,6 +32,8 @@ ALWAYS_ALLOW_PREFIXES = (
     "/auth",
     "/health",
     "/runtime",
+    # 小程序作业人识别（登录前）
+    "/production-progress/mp",
     # 租户自管组织：任意客户租户都可管人/角色/部门/字典（不按 SKU 拦截）
     "/users",
     "/roles",

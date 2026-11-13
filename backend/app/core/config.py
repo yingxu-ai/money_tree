@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     default_admin_username: str = "admin"
     default_admin_password: str = "admin123"
 
+    # 微信小程序（生成车间厂码用）；未配置则 PC 出示 scene 供运营在公众平台制码
+    wechat_mp_appid: str = ""
+    wechat_mp_secret: str = ""
+    # 厂码小程序页（子包路径，无开头 /）
+    wechat_mp_factory_page: str = "gongshi-miniprogram/pages/gate/index"
+
     # 模式 B：逗号分隔 module_id；空 / * / all = 全开
     # 例：ENABLED_MODULES=scheduling 或 scheduling,toolbox
     enabled_modules: str = "*"

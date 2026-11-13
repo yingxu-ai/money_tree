@@ -3,6 +3,7 @@ import {
   Card,
   Col,
   DatePicker,
+  Divider,
   Drawer,
   Form,
   Input,
@@ -14,11 +15,13 @@ import {
   Tag,
   Tooltip,
   Typography,
+  message,
 } from "antd";
 import {
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
+  PlusOutlined,
   StopOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
@@ -54,6 +57,11 @@ type OpSpecForm = {
   required_headcount: number;
 };
 
+function formatDateTime(v?: string | null) {
+  if (!v) return "—";
+  return v.length >= 16 ? `${v.slice(0, 10)} ${v.slice(11, 16)}` : v;
+}
+
 export default function WorkOrdersPage() {
   const navigate = useNavigate();
   const { data, loading, refresh } = useRequest(fetchWorkOrders, { immediate: true });
@@ -68,10 +76,78 @@ export default function WorkOrdersPage() {
   const [kindFilter, setKindFilter] = useState<string | undefined>();
   const [keyword, setKeyword] = useState("");
   const [detail, setDetail] = useState<WorkOrderItem | null>(null);
-  const linkMode = Form.useWatch("link_mode", form);
-  const sourceType = Form.useWatch("source_type", form);
+  const [customKinds, setCustomKinds] = useState<Record<string, string>>({});
+  const [kindDraft, setKindDraft] = useState("");
+  const [customProducts, setCustomProducts] = useState<string[]>([]);
+  const [productDraft, setProductDraft] = useState("");
   const woKind = Form.useWatch("wo_kind", form);
   const editWoKind = Form.useWatch("wo_kind", editForm);
+
+  const kindOptions = useMemo(() => {
+    const map: Record<string, string> = { ...WO_KIND_LABEL, ...customKinds };
+    for (const row of data?.items ?? []) {
+      const k = row.wo_kind || "normal";
+      if (!map[k]) map[k] = row.wo_kind_label || k;
+    }
+    return Object.entries(map).map(([value, label]) => ({ value, label }));
+  }, [customKinds, data?.items]);
+
+  const addCustomKind = () => {
+    const label = kindDraft.trim();
+    if (!label) {
+      message.warning("请输入工单类型名称");
+      return;
+    }
+    const exists = kindOptions.some((o) => o.value === label || o.label === label);
+    if (exists) {
+      form.setFieldsValue({
+        wo_kind: kindOptions.find((o) => o.label === label || o.value === label)?.value,
+      });
+      setKindDraft("");
+      return;
+    }
+    setCustomKinds((prev) => ({ ...prev, [label]: label }));
+    form.setFieldsValue({ wo_kind: label });
+    editForm.setFieldsValue({ wo_kind: label });
+    setKindDraft("");
+    message.success(`已添加类型「${label}」`);
+  };
+
+  const productOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of customProducts) {
+      const name = (p || "").trim();
+      if (name) set.add(name);
+    }
+    for (const row of data?.items ?? []) {
+      const name = (row.product || "").trim();
+      if (name) set.add(name);
+    }
+    for (const o of data?.orders ?? []) {
+      const name = (o.product || "").trim();
+      if (name) set.add(name);
+    }
+    return Array.from(set)
+      .sort((a, b) => a.localeCompare(b, "zh"))
+      .map((value) => ({ value, label: value }));
+  }, [customProducts, data?.items, data?.orders]);
+
+  const addCustomProduct = () => {
+    const name = productDraft.trim();
+    if (!name) {
+      message.warning("请输入产品名称");
+      return;
+    }
+    if (!productOptions.some((o) => o.value === name)) {
+      setCustomProducts((prev) => [...prev, name]);
+    }
+    form.setFieldsValue({ product: name });
+    editForm.setFieldsValue({ product: name });
+    setProductDraft("");
+    message.success(`已加入产品列表「${name}」`);
+  };
+
+
 
   const overview = useMemo(() => {
     const rows = data?.items ?? [];
@@ -131,21 +207,36 @@ export default function WorkOrdersPage() {
       required_headcount: 1,
     }));
 
+  const openCreate = () => {
+    form.resetFields();
+    setKindDraft("");
+    setProductDraft("");
+    form.setFieldsValue({
+      priority: "normal",
+      wo_kind: "normal",
+      due_date: dayjs().add(7, "day"),
+      op_specs:
+        defaultOpSpecs.length > 0
+          ? defaultOpSpecs
+          : [
+              { template_id: "tpl-1", duration_days: 2, required_headcount: 1 },
+              { template_id: "tpl-2", duration_days: 2, required_headcount: 1 },
+            ],
+    });
+    setOpen(true);
+  };
+
   const { mutate: save, loading: saving } = useMutation(
     async (values: {
       name: string;
+      code?: string;
+      order_code?: string;
       product?: string;
       due_date: Dayjs;
       priority?: string;
       wo_kind?: string;
       op_specs?: OpSpecForm[];
-      link_mode?: "new" | "existing";
-      order_id?: string;
-      source_type?: string;
-      order_name?: string;
-      customer_name?: string;
     }) => {
-      const linkExisting = values.link_mode === "existing" && values.order_id;
       const opSpecs = (values.op_specs || [])
         .filter((s) => s?.template_id)
         .map((s) => ({
@@ -153,17 +244,18 @@ export default function WorkOrdersPage() {
           duration_days: Math.max(1, Number(s.duration_days) || 1),
           required_headcount: Math.max(1, Number(s.required_headcount) || 1),
         }));
+      const orderCode = (values.order_code || "").trim();
       return createWorkOrder({
         name: values.name,
+        code: (values.code || "").trim() || undefined,
+        order_code: orderCode || undefined,
         product: values.product || "",
         due_date: values.due_date.format("YYYY-MM-DD"),
         priority: values.priority || "normal",
         wo_kind: values.wo_kind || "normal",
         op_specs: opSpecs,
-        order_id: linkExisting ? values.order_id : undefined,
-        source_type: linkExisting ? undefined : values.source_type || "internal",
-        order_name: linkExisting ? undefined : values.order_name || values.name,
-        customer_name: linkExisting ? undefined : values.customer_name,
+        source_type: orderCode ? "customer" : "internal",
+        order_name: values.name,
       });
     },
     {
@@ -255,23 +347,7 @@ export default function WorkOrdersPage() {
         extra={
           <Button
             type="primary"
-            onClick={() => {
-              form.resetFields();
-              form.setFieldsValue({
-                priority: "normal",
-                wo_kind: "normal",
-                link_mode: "new",
-                source_type: "customer",
-                op_specs:
-                  defaultOpSpecs.length > 0
-                    ? defaultOpSpecs
-                    : [
-                        { template_id: "tpl-1", duration_days: 2, required_headcount: 1 },
-                        { template_id: "tpl-2", duration_days: 2, required_headcount: 1 },
-                      ],
-              });
-              setOpen(true);
-            }}
+            onClick={openCreate}
           >
             ＋ 新建工单
           </Button>
@@ -363,10 +439,7 @@ export default function WorkOrdersPage() {
               style={{ width: 120 }}
               value={kindFilter}
               onChange={setKindFilter}
-              options={Object.entries(WO_KIND_LABEL).map(([value, label]) => ({
-                value,
-                label,
-              }))}
+              options={kindOptions}
             />
             <Select
               allowClear
@@ -382,26 +455,22 @@ export default function WorkOrdersPage() {
           </Space>
         )}
         columns={[
-          { title: "工单号", dataIndex: "code", width: 130 },
+          { title: "工单号", dataIndex: "code", width: 140 },
           { title: "名称", dataIndex: "name" },
           {
-            title: "来源",
-            dataIndex: "source_type",
-            width: 100,
-            render: (v: string) => (
-              <StatusTag value={v} labelMap={SOURCE_TYPE_LABEL} colorMap={SOURCE_TYPE_COLOR} />
-            ),
+            title: "订单号",
+            dataIndex: "order_code",
+            width: 130,
+            render: (v: string) => v || "—",
           },
           {
             title: "类型",
             dataIndex: "wo_kind",
             width: 100,
-            render: (v: string) => (
-              <StatusTag
-                value={v || "normal"}
-                labelMap={WO_KIND_LABEL}
-                colorMap={WO_KIND_COLOR}
-              />
+            render: (v: string, row: WorkOrderItem) => (
+              <Tag color={WO_KIND_COLOR[v || "normal"] || "default"}>
+                {row.wo_kind_label || WO_KIND_LABEL[v || "normal"] || v || "正常生产"}
+              </Tag>
             ),
           },
           { title: "产品", dataIndex: "product" },
@@ -409,11 +478,58 @@ export default function WorkOrdersPage() {
           {
             title: "交期",
             dataIndex: "due_date",
-            render: (v: string) => (v ? v.slice(5) : "-"),
+            width: 160,
+            render: (v: string, row: WorkOrderItem) => {
+              if (!v) return "—";
+              const changed =
+                row.due_date_updated_at &&
+                (row.due_date_initial || "") !== (row.due_date || "");
+              return (
+                <span>
+                  {v.slice(0, 10)}
+                  {changed ? (
+                    <>
+                      <br />
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        改于 {formatDateTime(row.due_date_updated_at)}
+                        {row.due_date_updated_by ? ` · ${row.due_date_updated_by}` : ""}
+                      </Typography.Text>
+                    </>
+                  ) : null}
+                </span>
+              );
+            },
+          },
+          {
+            title: "创建",
+            width: 160,
+            render: (_: unknown, row: WorkOrderItem) => (
+              <span>
+                {formatDateTime(row.created_at)}
+                <br />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {row.created_by || "—"}
+                </Typography.Text>
+              </span>
+            ),
+          },
+          {
+            title: "修改",
+            width: 160,
+            render: (_: unknown, row: WorkOrderItem) => (
+              <span>
+                {formatDateTime(row.updated_at)}
+                <br />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {row.updated_by || "—"}
+                </Typography.Text>
+              </span>
+            ),
           },
           {
             title: "优先级",
             dataIndex: "priority",
+            width: 90,
             render: (v: string) => (
               <StatusTag value={v} labelMap={PRIORITY_LABEL} colorMap={PRIORITY_COLOR} />
             ),
@@ -421,6 +537,7 @@ export default function WorkOrdersPage() {
           {
             title: "状态",
             dataIndex: "status",
+            width: 90,
             render: (v: string) => (
               <StatusTag value={v} labelMap={WO_STATUS_LABEL} colorMap={WO_STATUS_COLOR} />
             ),
@@ -507,7 +624,10 @@ export default function WorkOrdersPage() {
         open={open}
         form={form}
         confirmLoading={saving}
-        width={720}
+        width={860}
+        formLayout="horizontal"
+        labelCol={{ flex: "88px" }}
+        wrapperCol={{ flex: 1 }}
         onCancel={() => setOpen(false)}
         onOk={async () => {
           const values = await form.validateFields();
@@ -515,93 +635,107 @@ export default function WorkOrdersPage() {
         }}
         okText="创建并拆分工序"
       >
-        <Form.Item name="link_mode" label="关联方式" rules={[{ required: true }]}>
-          <Select
-            options={[
-              { value: "new", label: "新建订单 / 内部任务" },
-              { value: "existing", label: "挂到已有订单（返工 / 增补推荐）" },
-            ]}
-            onChange={(mode: string) => {
-              if (mode === "existing" && (!woKind || woKind === "normal")) {
-                form.setFieldsValue({ wo_kind: "rework" });
-              }
-            }}
-          />
-        </Form.Item>
-        {linkMode === "existing" ? (
-          <Form.Item name="order_id" label="选择订单 / 任务" rules={[{ required: true }]}>
-            <Select
-              showSearch
-              optionFilterProp="label"
-              options={(data?.orders ?? []).map((o) => ({
-                value: o.id,
-                label: `${o.code} · ${o.name}（${o.source_type_label || SOURCE_TYPE_LABEL[o.source_type]}）`,
-              }))}
-            />
-          </Form.Item>
-        ) : (
-          <>
-            <Form.Item name="source_type" label="来源类型" rules={[{ required: true }]}>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item name="name" label="工单名称" rules={[{ required: true }]}>
+              <Input
+                placeholder={
+                  woKind === "rework"
+                    ? "例如：底座焊缝返工"
+                    : woKind === "add_ops"
+                      ? "例如：增补质检工序"
+                      : "例如：设备底座加工"
+                }
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="code" label="工单号" extra="可留空自动生成">
+              <Input placeholder="例如：WO-20261107-001" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="order_code" label="订单号" extra="如有则填">
+              <Input placeholder="例如：SO-2026-001" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="wo_kind" label="工单类型" rules={[{ required: true }]}>
+              <Select
+                showSearch
+                optionFilterProp="label"
+                options={kindOptions}
+                placeholder="选择或添加类型"
+                dropdownRender={(menu) => (
+                  <>
+                    {menu}
+                    <Divider style={{ margin: "8px 0" }} />
+                    <Space style={{ padding: "0 8px 8px" }}>
+                      <Input
+                        placeholder="新类型名称"
+                        value={kindDraft}
+                        onChange={(e) => setKindDraft(e.target.value)}
+                        onPressEnter={(e) => {
+                          e.preventDefault();
+                          addCustomKind();
+                        }}
+                      />
+                      <Button type="link" icon={<PlusOutlined />} onClick={addCustomKind}>
+                        添加
+                      </Button>
+                    </Space>
+                  </>
+                )}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="product" label="产品" rules={[{ required: true, message: "请选择产品" }]}>
+              <Select
+                showSearch
+                optionFilterProp="label"
+                options={productOptions}
+                placeholder="选择产品"
+                dropdownRender={(menu) => (
+                  <>
+                    {menu}
+                    <Divider style={{ margin: "8px 0" }} />
+                    <Space style={{ padding: "0 8px 8px" }}>
+                      <Input
+                        placeholder="新产品名称"
+                        value={productDraft}
+                        onChange={(e) => setProductDraft(e.target.value)}
+                        onPressEnter={(e) => {
+                          e.preventDefault();
+                          addCustomProduct();
+                        }}
+                      />
+                      <Button type="link" icon={<PlusOutlined />} onClick={addCustomProduct}>
+                        添加产品
+                      </Button>
+                    </Space>
+                  </>
+                )}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="due_date" label="交期" rules={[{ required: true }]}>
+              <DatePicker style={{ width: "100%" }} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="priority" label="优先级" rules={[{ required: true }]}>
               <Select
                 options={[
-                  { value: "customer", label: "客户订单" },
-                  { value: "internal", label: "内部生产（无订单时）" },
+                  { value: "normal", label: "普通优先级" },
+                  { value: "high", label: "高优先级" },
+                  { value: "rush", label: "紧急插队" },
                 ]}
               />
             </Form.Item>
-            <Form.Item name="order_name" label="订单 / 任务名称">
-              <Input placeholder="默认与工单名称相同" />
-            </Form.Item>
-            {sourceType === "customer" && (
-              <Form.Item name="customer_name" label="客户">
-                <Input placeholder="客户名称" />
-              </Form.Item>
-            )}
-          </>
-        )}
-        <Form.Item
-          name="wo_kind"
-          label="工单类型"
-          rules={[{ required: true }]}
-          extra={
-            linkMode === "existing"
-              ? "返工 / 增补工序请挂原订单；工序选实际需要的模板"
-              : undefined
-          }
-        >
-          <Select
-            options={Object.entries(WO_KIND_LABEL).map(([value, label]) => ({
-              value,
-              label,
-            }))}
-          />
-        </Form.Item>
-        <Form.Item name="name" label="工单名称" rules={[{ required: true }]}>
-          <Input
-            placeholder={
-              woKind === "rework"
-                ? "例如：底座焊缝返工"
-                : woKind === "add_ops"
-                  ? "例如：增补质检工序"
-                  : "例如：设备底座加工"
-            }
-          />
-        </Form.Item>
-        <Form.Item name="product" label="产品 / 项目">
-          <Input placeholder="要生产的产品" />
-        </Form.Item>
-        <Form.Item name="due_date" label="交期" rules={[{ required: true }]}>
-          <DatePicker style={{ width: "100%" }} />
-        </Form.Item>
-        <Form.Item name="priority" label="优先级" rules={[{ required: true }]}>
-          <Select
-            options={[
-              { value: "normal", label: "普通优先级" },
-              { value: "high", label: "高优先级" },
-              { value: "rush", label: "紧急插队" },
-            ]}
-          />
-        </Form.Item>
+          </Col>
+        </Row>
 
         <Form.List
           name="op_specs"
@@ -703,14 +837,33 @@ export default function WorkOrdersPage() {
         okText="保存"
       >
         <div style={{ marginBottom: 12, color: "#718096", fontSize: 12 }}>
-          可改名称、产品、交期、优先级与类型。关联订单与工序拆分请在新建时确定；工序排期请到甘特调整。
+          可改名称、产品、交期、优先级与类型。修改交期会记录修改时间与修改人；工序排期请到甘特调整。
         </div>
         <Form.Item name="wo_kind" label="工单类型" rules={[{ required: true }]}>
           <Select
-            options={Object.entries(WO_KIND_LABEL).map(([value, label]) => ({
-              value,
-              label,
-            }))}
+            showSearch
+            optionFilterProp="label"
+            options={kindOptions}
+            dropdownRender={(menu) => (
+              <>
+                {menu}
+                <Divider style={{ margin: "8px 0" }} />
+                <Space style={{ padding: "0 8px 8px" }}>
+                  <Input
+                    placeholder="新类型名称"
+                    value={kindDraft}
+                    onChange={(e) => setKindDraft(e.target.value)}
+                    onPressEnter={(e) => {
+                      e.preventDefault();
+                      addCustomKind();
+                    }}
+                  />
+                  <Button type="link" icon={<PlusOutlined />} onClick={addCustomKind}>
+                    添加
+                  </Button>
+                </Space>
+              </>
+            )}
           />
         </Form.Item>
         <Form.Item name="name" label="工单名称" rules={[{ required: true }]}>
@@ -724,8 +877,33 @@ export default function WorkOrdersPage() {
             }
           />
         </Form.Item>
-        <Form.Item name="product" label="产品 / 项目">
-          <Input placeholder="要生产的产品" />
+        <Form.Item name="product" label="产品" rules={[{ required: true, message: "请选择产品" }]}>
+          <Select
+            showSearch
+            optionFilterProp="label"
+            options={productOptions}
+            placeholder="选择产品"
+            dropdownRender={(menu) => (
+              <>
+                {menu}
+                <Divider style={{ margin: "8px 0" }} />
+                <Space style={{ padding: "0 8px 8px" }}>
+                  <Input
+                    placeholder="新产品名称"
+                    value={productDraft}
+                    onChange={(e) => setProductDraft(e.target.value)}
+                    onPressEnter={(e) => {
+                      e.preventDefault();
+                      addCustomProduct();
+                    }}
+                  />
+                  <Button type="link" icon={<PlusOutlined />} onClick={addCustomProduct}>
+                    添加产品
+                  </Button>
+                </Space>
+              </>
+            )}
+          />
         </Form.Item>
         <Form.Item name="due_date" label="交期" rules={[{ required: true }]}>
           <DatePicker style={{ width: "100%" }} />
@@ -765,18 +943,34 @@ export default function WorkOrdersPage() {
               <Tag color={SOURCE_TYPE_COLOR[detail.source_type || "internal"]}>
                 {detail.source_type_label || SOURCE_TYPE_LABEL[detail.source_type || "internal"]}
               </Tag>
-              <Tag color={WO_KIND_COLOR[detail.wo_kind || "normal"]}>
-                {detail.wo_kind_label || WO_KIND_LABEL[detail.wo_kind || "normal"]}
+              <Tag color={WO_KIND_COLOR[detail.wo_kind || "normal"] || "default"}>
+                {detail.wo_kind_label || WO_KIND_LABEL[detail.wo_kind || "normal"] || detail.wo_kind}
               </Tag>
               <Tag color={PRIORITY_COLOR[detail.priority]}>{PRIORITY_LABEL[detail.priority]}</Tag>
               <Tag color={WO_STATUS_COLOR[detail.status]}>{WO_STATUS_LABEL[detail.status]}</Tag>
             </div>
-            <div>
-              订单 / 任务：{detail.order_code || "-"} · {detail.order_name || "-"}
-            </div>
+            <div>工单号：{detail.code}</div>
+            <div>订单号：{detail.order_code || "—"}</div>
             {detail.customer_name ? <div>客户：{detail.customer_name}</div> : null}
-            <div>产品：{detail.product || "-"}</div>
-            <div>交期：{detail.due_date}</div>
+            <div>产品：{detail.product || "—"}</div>
+            <div>
+              交期：{detail.due_date || "—"}
+              {detail.due_date_initial &&
+              detail.due_date_updated_at &&
+              detail.due_date_initial !== detail.due_date ? (
+                <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>
+                  原交期 {detail.due_date_initial} · 于{" "}
+                  {formatDateTime(detail.due_date_updated_at)} 由{" "}
+                  {detail.due_date_updated_by || "—"} 修改
+                </Typography.Text>
+              ) : null}
+            </div>
+            <div>
+              创建：{formatDateTime(detail.created_at)} · {detail.created_by || "—"}
+            </div>
+            <div>
+              修改：{formatDateTime(detail.updated_at)} · {detail.updated_by || "—"}
+            </div>
             <DataTable
               rowKey="id"
               pagination={false}

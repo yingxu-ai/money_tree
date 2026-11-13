@@ -1,0 +1,13 @@
+{
+  "module_id": "progress-analytics",
+  "name": "多维生产分析",
+  "premium": true,
+  "frontend_paths": ["frontend/src/modules/progress-analytics"],
+  "backend_paths": [
+    "backend/app/modules/progress_analytics",
+    "backend/app/api/progress_analytics.py"
+  ],
+  "menu_ids": [92],
+  "api_path_prefixes": ["/api/v1/progress-analytics"],
+  "route_prefixes": ["/progress-analytics"]
+}

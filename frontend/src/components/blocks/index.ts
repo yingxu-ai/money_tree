@@ -1,5 +1,5 @@
 export { default as KpiRow } from "./KpiRow";
-export type { KpiItem, KpiRowProps } from "./KpiRow";
+export type { KpiItem, KpiPart, KpiRowProps } from "./KpiRow";
 
 export { default as ChartGrid } from "./ChartGrid";
 export type { ChartBlockItem, ChartBlockType, ChartGridProps } from "./ChartGrid";

@@ -12,6 +12,7 @@ from app.api import (
     public,
     runtime,
     production_progress,
+    progress_analytics,
     scheduling,
     system,
 )
@@ -40,3 +41,4 @@ api_router.include_router(demo.router)
 api_router.include_router(equipment_analysis.router)
 api_router.include_router(scheduling.router)
 api_router.include_router(production_progress.router)
+api_router.include_router(progress_analytics.router)

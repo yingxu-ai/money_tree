@@ -1,0 +1,13 @@
+{
+  "module_id": "production-progress",
+  "name": "生产进度",
+  "frontend_paths": ["frontend/src/modules/production-progress"],
+  "frontend_api_paths": ["frontend/src/modules/production-progress/api/progress.ts"],
+  "backend_paths": [
+    "backend/app/modules/production_progress",
+    "backend/app/api/production_progress.py"
+  ],
+  "menu_ids": [80, 81, 88, 89, 90, 91],
+  "api_path_prefixes": ["/api/v1/production-progress"],
+  "route_prefixes": ["/production-progress"]
+}

@@ -23,6 +23,7 @@ def parse_enabled_modules(raw: str | None) -> set[str] | None:
 MENU_PATH_MODULE_PREFIXES: list[tuple[str, str]] = [
     ("/scheduling", "scheduling"),
     ("/production-progress", "production-progress"),
+    ("/progress-analytics", "progress-analytics"),
     ("/devices", "equipment-analysis"),
     ("/analysis", "equipment-analysis"),
     ("/tools", "toolbox"),

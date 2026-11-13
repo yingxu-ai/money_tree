@@ -1,4 +1,4 @@
-export { default as DataTable } from "./DataTable";
+export { default as DataTable, DEFAULT_TABLE_PAGINATION } from "./DataTable";
 export { default as DictSelect } from "./DictSelect";
 export { default as DeptTreeSelect } from "./DeptTreeSelect";
 export { default as FileUploadButton } from "./FileUploadButton";

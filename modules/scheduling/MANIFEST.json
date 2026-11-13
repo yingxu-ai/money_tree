@@ -7,7 +7,7 @@
     "backend/app/modules/scheduling",
     "backend/app/api/scheduling.py"
   ],
-  "menu_ids": [60, 61, 62, 63, 64],
+  "menu_ids": [60, 61, 62, 63, 64, 65],
   "api_path_prefixes": ["/api/v1/scheduling"],
   "route_prefixes": ["/scheduling"]
 }

@@ -127,12 +127,14 @@ class WorkOrderCreate(BaseModel):
     product: str | None = ""
     due_date: str
     priority: str = "normal"
-    # normal | rework | add_ops | repair
+    # 预设或手工新增的工单类型
     wo_kind: str = "normal"
+    code: str | None = None
+    order_code: str | None = None
     template_ids: list[str] | None = None
     # 每道工序：模板 + 预计天数 + 每天人数
     op_specs: list[dict] | None = None
-    # 挂已有订单；为空则按 source_type 自动创建客户订单或内部生产任务
+    # 挂已有订单；为空则按订单号/来源自动创建
     order_id: str | None = None
     source_type: str = "internal"  # customer | internal
     order_name: str | None = None
@@ -469,16 +471,34 @@ async def list_work_orders(request: Request, _user=Depends(get_current_user), st
     return ok(request, store.work_orders_overview())
 
 
+def _actor_name(user: CurrentUser) -> str:
+    return (user.user.display_name or user.user.username or "").strip() or "系统"
+
+
 @router.post("/work-orders")
 async def create_work_order(
-    payload: WorkOrderCreate, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
-    return ok(request, store.create_work_order(payload.model_dump()))
+    payload: WorkOrderCreate,
+    request: Request,
+    _user: CurrentUser = Depends(get_current_user),
+    store: SchedulingStore = Depends(_store),
+):
+    body = payload.model_dump()
+    body["created_by"] = _actor_name(_user)
+    body["updated_by"] = body["created_by"]
+    return ok(request, store.create_work_order(body))
 
 
 @router.put("/work-orders/{wo_id}")
 async def update_work_order(
-    wo_id: str, payload: WorkOrderUpdate, request: Request, _user=Depends(get_current_user), store: SchedulingStore = Depends(_store)):
-    return ok(request, store.update_work_order(wo_id, payload.model_dump(exclude_none=True)))
+    wo_id: str,
+    payload: WorkOrderUpdate,
+    request: Request,
+    _user: CurrentUser = Depends(get_current_user),
+    store: SchedulingStore = Depends(_store),
+):
+    body = payload.model_dump(exclude_none=True)
+    body["updated_by"] = _actor_name(_user)
+    return ok(request, store.update_work_order(wo_id, body))
 
 
 @router.post("/work-orders/{wo_id}/cancel")

@@ -8,6 +8,8 @@ export type ModuleId =
   | "demo"
   | "equipment-analysis"
   | "scheduling"
+  | "production-progress"
+  | "progress-analytics"
   | "toolbox";
 
 export interface EditionConfig {

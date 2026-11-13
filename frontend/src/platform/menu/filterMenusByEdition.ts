@@ -10,6 +10,8 @@ export const MODULE_ROUTE_PREFIXES: Record<ModuleId, string[]> = {
   demo: ["/demo"],
   "equipment-analysis": ["/devices", "/analysis"],
   scheduling: ["/scheduling"],
+  "production-progress": ["/production-progress"],
+  "progress-analytics": ["/progress-analytics"],
   toolbox: ["/tools"],
 };
 

@@ -15,6 +15,9 @@ class CurrentUser:
     # 多角色取最宽后的有效数据范围
     data_scope: str = DataScope.ALL.value
     operating_tenant_id: int | None = None
+    # 小程序现场作业人：姓名+工号识别后的人员 id（无 sys_user）
+    person_id: str | None = None
+    is_mp_worker: bool = False
 
     @property
     def id(self) -> int:

@@ -20,6 +20,9 @@ from app.models.system import SysApiPermission, SysRole, SysRoleApiPermission
 PUBLIC_API_PREFIXES = (
     "/public",
     "/auth/login",
+    # 小程序：厂码解析、作业人识别（无需先登录）
+    "/production-progress/mp/identify",
+    "/production-progress/mp/factory",
 )
 
 # 登录后本人信息/菜单/改密等：任意已登录用户可访问，不按角色勾接口
@@ -210,6 +213,22 @@ API_META_OVERLAYS: dict[tuple[str, str], dict[str, str]] = {
         "name": "生产进度全局看板",
         "permission_code": "production_progress:view",
     },
+    ("POST", "/production-progress/mp/identify"): {
+        "name": "小程序作业人识别",
+        "permission_code": "",
+    },
+    ("GET", "/production-progress/mp/factory/{factory_code}"): {
+        "name": "解析车间厂码",
+        "permission_code": "",
+    },
+    ("GET", "/production-progress/mp/factory-code"): {
+        "name": "查看本厂厂码",
+        "permission_code": "production_progress:view",
+    },
+    ("GET", "/production-progress/mp/factory-wxacode"): {
+        "name": "下载厂码小程序码",
+        "permission_code": "production_progress:view",
+    },
     ("GET", "/production-progress/shop-floor-reports"): {
         "name": "生产进度日报列表",
         "permission_code": "production_progress:view",
@@ -261,6 +280,14 @@ API_META_OVERLAYS: dict[tuple[str, str], dict[str, str]] = {
     ("DELETE", "/production-progress/shop-floor-reports/{report_id}"): {
         "name": "生产进度删除报工",
         "permission_code": "production_progress:report",
+    },
+    ("GET", "/progress-analytics/meta"): {
+        "name": "多维分析元数据",
+        "permission_code": "progress_analytics:view",
+    },
+    ("POST", "/progress-analytics/query"): {
+        "name": "多维分析查询",
+        "permission_code": "progress_analytics:view",
     },
 }
 

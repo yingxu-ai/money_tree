@@ -7,6 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.factory_code_service import ensure_factory_code
 from app.application.tenant_sku import enabled_modules_as_list, parse_enabled_modules
 from app.auth.tenant_context import PLATFORM_TENANT_ID, is_platform_user
 from app.core.exceptions import NotFoundException, PermissionException, ValidationException
@@ -56,6 +57,7 @@ class TenantService:
         )
         self.session.add(row)
         await self.session.flush()
+        await ensure_factory_code(self.session, row)
 
         root_name = (getattr(data, "root_dept_name", None) or f"{row.name}").strip()
         root_code = f"{code}-HQ"
@@ -133,6 +135,7 @@ class TenantService:
             "id": row.id,
             "name": row.name,
             "code": row.code,
+            "factory_code": row.factory_code,
             "enabled_modules": row.enabled_modules,
             "enabled_module_list": enabled_modules_as_list(enabled),
             "status": row.status,

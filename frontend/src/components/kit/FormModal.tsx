@@ -8,6 +8,8 @@ export interface FormModalProps extends Omit<ModalProps, "onOk" | "children"> {
   onOk?: () => void | Promise<void>;
   /** Form layout，默认 vertical */
   formLayout?: "horizontal" | "vertical" | "inline";
+  labelCol?: { span?: number; flex?: string | number };
+  wrapperCol?: { span?: number; flex?: string | number };
 }
 
 /**
@@ -21,6 +23,8 @@ export default function FormModal({
   onCancel,
   destroyOnHidden = true,
   formLayout = "vertical",
+  labelCol,
+  wrapperCol,
   confirmLoading,
   ...modalProps
 }: FormModalProps) {
@@ -34,7 +38,7 @@ export default function FormModal({
         await onOk?.();
       }}
     >
-      <Form form={form} layout={formLayout}>
+      <Form form={form} layout={formLayout} labelCol={labelCol} wrapperCol={wrapperCol}>
         {children}
       </Form>
     </Modal>

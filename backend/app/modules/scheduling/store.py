@@ -20,6 +20,21 @@ WO_KIND_LABELS = {
     "repair": "返修",
 }
 
+
+def _resolve_wo_kind(raw: str | None) -> tuple[str, str]:
+    """返回 (kind_key, label)；未知类型允许手工新增，键与展示名相同。"""
+    text = (raw or "normal").strip() or "normal"
+    if text in WO_KIND_LABELS:
+        return text, WO_KIND_LABELS[text]
+    for key, label in WO_KIND_LABELS.items():
+        if label == text:
+            return key, label
+    return text, text
+
+
+def _now_iso() -> str:
+    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
 # 排产快照：最多保留最近 N 步可回退
 HISTORY_LIMIT = 10
 
@@ -1294,21 +1309,31 @@ def _build_progress_bulk_seed(*, person_count: int = 150, days: int = 21) -> dic
                     "review_note": "请重报" if status == "rejected" else "",
                 }
             )
-        # 成品确认（主产品）
+        # 成品确认（主产品·按班各填，日合计=各班之和）
         if day_offset % 2 == 0:
-            finished.append(
-                {
-                    "id": f"sff-bulk-{work_date}",
-                    "work_date": work_date,
-                    "product": "底座总成 A",
-                    "suggested_qty": 800,
-                    "confirmed_qty": 780 + rng.randint(-40, 60),
-                    "status": "confirmed",
-                    "confirmed_by": "车间主任",
-                    "confirmed_at": f"{work_date}T18:00:00",
-                    "note": "批量演示成品确认",
-                }
-            )
+            for fam, label, share in (
+                ("sh-day", "白班", 0.34),
+                ("sh-mid", "中班", 0.33),
+                ("sh-night", "夜班", 0.33),
+            ):
+                base = int(800 * share)
+                finished.append(
+                    {
+                        "id": f"sff-bulk-{work_date}-{fam}",
+                        "work_date": work_date,
+                        "product": "底座总成 A",
+                        "shift_name": label,
+                        "shift_family_id": fam,
+                        "suggested_qty": float(base),
+                        "confirmed_qty": float(base + rng.randint(-15, 20)),
+                        "status": "confirmed",
+                        "submitted_by": f"{label}班长",
+                        "submitted_at": f"{work_date}T17:30:00",
+                        "confirmed_by": "车间主任",
+                        "confirmed_at": f"{work_date}T18:00:00",
+                        "note": f"批量演示·{label}成品确认",
+                    }
+                )
 
     # 去掉临时字段
     clean_persons = []
@@ -2063,17 +2088,30 @@ class SchedulingStore:
     def _enrich_work_order(self, wo: dict) -> dict:
         order = self._order_map().get(wo.get("order_id") or "", {})
         kind = wo.get("wo_kind") or "normal"
+        kind_label = (wo.get("wo_kind_label") or "").strip() or WO_KIND_LABELS.get(kind, kind)
+        plan_qty = wo.get("plan_qty")
+        if plan_qty in (None, ""):
+            plan_qty = order.get("plan_qty")
         return {
             **wo,
             "wo_kind": kind,
-            "wo_kind_label": WO_KIND_LABELS.get(kind, kind),
-            "order_code": order.get("code"),
+            "wo_kind_label": kind_label,
+            "plan_qty": float(plan_qty) if plan_qty not in (None, "") else None,
+            "quantity": float(plan_qty) if plan_qty not in (None, "") else None,
+            "order_code": order.get("code") or wo.get("order_code"),
             "order_name": order.get("name"),
             "source_type": order.get("source_type") or "internal",
             "source_type_label": (
                 "客户订单" if order.get("source_type") == "customer" else "内部生产"
             ),
             "customer_name": order.get("customer_name"),
+            "created_at": wo.get("created_at"),
+            "created_by": wo.get("created_by"),
+            "updated_at": wo.get("updated_at"),
+            "updated_by": wo.get("updated_by"),
+            "due_date_initial": wo.get("due_date_initial") or wo.get("due_date"),
+            "due_date_updated_at": wo.get("due_date_updated_at"),
+            "due_date_updated_by": wo.get("due_date_updated_by"),
         }
 
     def _enrich_op(self, op: dict) -> dict:
@@ -2090,6 +2128,7 @@ class SchedulingStore:
         ids = _assignee_ids_of(op)
         names = [persons[i]["name"] for i in ids if i in persons]
         kind = wo.get("wo_kind") or "normal"
+        kind_label = (wo.get("wo_kind_label") or "").strip() or WO_KIND_LABELS.get(kind, kind)
         shift = self._resolve_op_shift(op)
         eid = op.get("equipment_id") or None
         eq = equipments.get(eid or "", {})
@@ -2103,7 +2142,7 @@ class SchedulingStore:
             "work_order_code": wo.get("code"),
             "work_order_name": wo.get("name"),
             "wo_kind": kind,
-            "wo_kind_label": WO_KIND_LABELS.get(kind, kind),
+            "wo_kind_label": kind_label,
             "order_id": wo.get("order_id"),
             "order_code": order.get("code"),
             "order_name": order.get("name"),
@@ -2665,12 +2704,43 @@ class SchedulingStore:
         }
 
     def _ensure_order_for_work_order(self, payload: dict[str, Any]) -> str:
-        """创建工单时：挂已有订单，或自动生成客户订单/内部生产任务。"""
+        """创建工单时：挂已有订单 / 按订单号复用或新建，或自动生成内部任务。"""
         order_id = payload.get("order_id")
         if order_id:
             if order_id not in self._order_map():
                 raise NotFoundException("订单不存在")
             return order_id
+
+        order_code = (payload.get("order_code") or "").strip()
+        if order_code:
+            existing = next(
+                (
+                    o
+                    for o in (self._data.get("orders") or [])
+                    if (o.get("code") or "").strip() == order_code
+                ),
+                None,
+            )
+            if existing:
+                return existing["id"]
+            seq = self._data["_seq"].get("order", 0) + 1
+            self._data["_seq"]["order"] = seq
+            plan_qty = payload.get("plan_qty")
+            if plan_qty is None:
+                plan_qty = payload.get("quantity")
+            order = {
+                "id": f"ord-{seq}",
+                "code": order_code,
+                "name": payload.get("order_name") or payload.get("name") or order_code,
+                "source_type": "customer",
+                "customer_name": payload.get("customer_name"),
+                "product": payload.get("product") or "",
+                "due_date": payload["due_date"],
+                "plan_qty": float(plan_qty) if plan_qty not in (None, "") else None,
+                "status": "open",
+            }
+            self._data["orders"].append(order)
+            return order["id"]
 
         source_type = payload.get("source_type") or "internal"
         if source_type not in ("customer", "internal"):
@@ -2678,14 +2748,19 @@ class SchedulingStore:
         seq = self._data["_seq"].get("order", 0) + 1
         self._data["_seq"]["order"] = seq
         prefix = "SO" if source_type == "customer" else "INT"
+        today = date.today().strftime("%Y%m%d")
+        plan_qty = payload.get("plan_qty")
+        if plan_qty is None:
+            plan_qty = payload.get("quantity")
         order = {
             "id": f"ord-{seq}",
-            "code": f"{prefix}-202609-{seq:03d}",
+            "code": f"{prefix}-{today}-{seq:03d}",
             "name": payload.get("order_name") or payload["name"],
             "source_type": source_type,
             "customer_name": payload.get("customer_name") if source_type == "customer" else None,
             "product": payload.get("product") or "",
             "due_date": payload["due_date"],
+            "plan_qty": float(plan_qty) if plan_qty not in (None, "") else None,
             "status": "open",
         }
         self._data["orders"].append(order)
@@ -3042,6 +3117,17 @@ class SchedulingStore:
             )
         return out
 
+    @staticmethod
+    def _apply_row_audit(row: dict[str, Any], payload: dict[str, Any], *, creating: bool) -> None:
+        """写入创建人/修改人及时间（基础信息主数据）。"""
+        now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        actor = (payload.get("updated_by") or payload.get("created_by") or "").strip() or "系统"
+        if creating or not row.get("created_at"):
+            row["created_at"] = now
+            row["created_by"] = (payload.get("created_by") or actor).strip() or "系统"
+        row["updated_at"] = now
+        row["updated_by"] = actor
+
     def upsert_resource(self, payload: dict[str, Any], resource_id: str | None = None) -> dict:
         """新增或更新班组。"""
         with self._lock:
@@ -3076,6 +3162,7 @@ class SchedulingStore:
                 row["status"] = status
                 if sort is not None:
                     row["sort"] = sort
+                self._apply_row_audit(row, payload, creating=False)
                 return deepcopy(row)
 
             dup = next(
@@ -3094,6 +3181,7 @@ class SchedulingStore:
                 "status": status,
                 "sort": sort,
             }
+            self._apply_row_audit(row, payload, creating=True)
             self._data["resources"].append(row)
             return deepcopy(row)
 
@@ -3165,6 +3253,7 @@ class SchedulingStore:
                 row["status"] = status
                 if sort is not None:
                     row["sort"] = sort
+                self._apply_row_audit(row, payload, creating=False)
                 return deepcopy(row)
 
             dup = next(
@@ -3183,6 +3272,7 @@ class SchedulingStore:
                 "status": status,
                 "sort": sort,
             }
+            self._apply_row_audit(row, payload, creating=True)
             self._data["skills"].append(row)
             return deepcopy(row)
 
@@ -3318,6 +3408,7 @@ class SchedulingStore:
                 row["resource_id"] = rid
                 if sort is not None:
                     row["sort"] = sort
+                self._apply_row_audit(row, payload, creating=False)
                 return deepcopy(row)
 
             dup = next(
@@ -3337,6 +3428,7 @@ class SchedulingStore:
                 "resource_id": rid,
                 "sort": sort,
             }
+            self._apply_row_audit(row, payload, creating=True)
             self._data["equipments"].append(row)
             return deepcopy(row)
 
@@ -3426,6 +3518,7 @@ class SchedulingStore:
                 )
                 if "resource_id" in payload:
                     person["resource_id"] = rid or None
+                self._apply_row_audit(person, payload, creating=False)
                 return deepcopy(person)
             person = {
                 "id": self._next_id("person", "p"),
@@ -3436,6 +3529,7 @@ class SchedulingStore:
                 "resource_id": rid or None,
                 "shift_family_ids": list(payload.get("shift_family_ids") or ["sh-day", "sh-mid", "sh-night"]),
             }
+            self._apply_row_audit(person, payload, creating=True)
             self._data["persons"].append(person)
             return deepcopy(person)
 
@@ -4629,36 +4723,74 @@ class SchedulingStore:
             order = self._order_map()[order_id]
             seq = self._data["_seq"]["work_order"] + 1
             self._data["_seq"]["work_order"] = seq
+            today = date.today().strftime("%Y%m%d")
+            code = (payload.get("code") or "").strip()
+            if not code:
+                code = f"WO-{today}-{seq:03d}"
+            elif any(
+                (w.get("code") or "").strip() == code for w in (self._data.get("work_orders") or [])
+            ):
+                raise ValidationException(f"工单号已存在：{code}")
+            kind, kind_label = _resolve_wo_kind(payload.get("wo_kind"))
+            due = payload.get("due_date") or order.get("due_date")
+            now = _now_iso()
+            actor = (payload.get("created_by") or payload.get("updated_by") or "").strip() or "系统"
+            plan_qty = payload.get("plan_qty")
+            if plan_qty is None:
+                plan_qty = payload.get("quantity")
+            if plan_qty not in (None, ""):
+                plan_qty = float(plan_qty)
+            else:
+                plan_qty = order.get("plan_qty")
+            if plan_qty not in (None, "") and order.get("plan_qty") in (None, ""):
+                order["plan_qty"] = float(plan_qty)
             wo = {
                 "id": f"wo-{seq}",
                 "order_id": order_id,
-                "code": f"WO-202609-{seq:03d}",
+                "code": code,
                 "name": payload["name"],
                 "product": payload.get("product") or order.get("product") or "",
-                "due_date": payload.get("due_date") or order.get("due_date"),
+                "plan_qty": float(plan_qty) if plan_qty not in (None, "") else None,
+                "due_date": due,
+                "due_date_initial": due,
                 "priority": payload.get("priority") or "normal",
-                "wo_kind": payload.get("wo_kind")
-                if payload.get("wo_kind") in WO_KIND_LABELS
-                else "normal",
+                "wo_kind": kind,
+                "wo_kind_label": kind_label,
                 "status": "pending",
+                "created_at": now,
+                "created_by": actor,
+                "updated_at": now,
+                "updated_by": actor,
             }
             self._data["work_orders"].append(wo)
             self._sync_order_status(order_id)
 
             template_ids = payload.get("template_ids") or []
             op_specs = payload.get("op_specs") or []
-            # op_specs 优先；否则用 template_ids；都空则默认模板链
+            # op_specs 优先（可带 process_id/name，兼容 template_id）；否则 template_ids；都空则默认模板链
             specs: list[dict[str, Any]] = []
             if op_specs:
                 for spec in op_specs:
-                    tid = spec.get("template_id")
-                    if not tid:
+                    if not isinstance(spec, dict):
+                        continue
+                    name = (
+                        (spec.get("name") or spec.get("process_name") or "").strip()
+                    )
+                    tid = (spec.get("template_id") or "").strip() or None
+                    pid = (spec.get("process_id") or "").strip() or None
+                    if not name and not tid and not pid:
                         continue
                     specs.append(
                         {
                             "template_id": tid,
+                            "process_id": pid,
+                            "name": name,
+                            "process_name": (spec.get("process_name") or name or "").strip()
+                            or None,
+                            "process_code": (spec.get("process_code") or "").strip() or None,
                             "duration_days": spec.get("duration_days"),
                             "required_headcount": spec.get("required_headcount"),
+                            "est_minutes": spec.get("est_minutes"),
                         }
                     )
             elif template_ids:
@@ -4669,6 +4801,23 @@ class SchedulingStore:
                 ]
 
             tpl_map = {t["id"]: t for t in self._data["templates"]}
+            # 名称模糊匹配模板，便于工序目录与排产模板对齐技能/设备
+            def _match_tpl_by_name(label: str) -> dict | None:
+                key = (label or "").strip()
+                if not key:
+                    return None
+                hit = next((t for t in tpl_map.values() if (t.get("name") or "") == key), None)
+                if hit:
+                    return hit
+                return next(
+                    (
+                        t
+                        for t in tpl_map.values()
+                        if key in (t.get("name") or "") or (t.get("name") or "") in key
+                    ),
+                    None,
+                )
+
             skill_to_res = {
                 "sk-assembly": "res-assembly",
                 "sk-weld": "res-weld",
@@ -4676,25 +4825,52 @@ class SchedulingStore:
                 "sk-qc": "res-qc",
                 "sk-pack": "res-assembly",
             }
+            name_to_skill = {
+                "焊接": "sk-weld",
+                "机加": "sk-assembly",
+                "装配": "sk-assembly",
+                "调试": "sk-debug",
+                "质检": "sk-qc",
+                "喷涂": "sk-assembly",
+            }
             created_ops: list[dict] = []
             prev_id: str | None = None
             for i, spec in enumerate(specs, start=1):
-                tpl = tpl_map.get(spec["template_id"])
-                if not tpl:
+                tid = spec.get("template_id")
+                tpl = tpl_map.get(tid) if tid else None
+                op_name = (spec.get("name") or spec.get("process_name") or "").strip()
+                if not tpl and op_name:
+                    tpl = _match_tpl_by_name(op_name)
+                if not op_name and tpl:
+                    op_name = (tpl.get("name") or "").strip()
+                if not op_name and not tpl:
                     continue
-                hours = float(tpl.get("std_hours") or 1)
+                if tpl:
+                    hours = float(tpl.get("std_hours") or 1)
+                    skill_id = tpl.get("skill_id") or "sk-assembly"
+                    pool = [str(x) for x in (tpl.get("equipment_ids") or []) if x]
+                    template_id = tpl.get("id")
+                else:
+                    est = spec.get("est_minutes")
+                    hours = float(est) / 60.0 if est not in (None, "") else 1.0
+                    skill_id = "sk-assembly"
+                    for k, sid in name_to_skill.items():
+                        if k in op_name:
+                            skill_id = sid
+                            break
+                    pool = []
+                    template_id = None
                 default_days = max(1, int(round(hours / 2)) or 1)
                 days = max(1, int(spec.get("duration_days") or default_days))
                 headcount = max(1, int(spec.get("required_headcount") or 1))
                 day_shift = self._active_shift_for_family("sh-day")
-                pool = [str(x) for x in (tpl.get("equipment_ids") or []) if x]
                 op = {
                     "id": self._next_id("operation", "op"),
                     "work_order_id": wo["id"],
-                    "name": tpl["name"],
+                    "name": op_name or (tpl or {}).get("name") or f"工序{i}",
                     "seq": i,
-                    "skill_id": tpl["skill_id"],
-                    "resource_id": skill_to_res.get(tpl["skill_id"], "res-assembly"),
+                    "skill_id": skill_id,
+                    "resource_id": skill_to_res.get(skill_id, "res-assembly"),
                     "equipment_id": pool[0] if len(pool) == 1 else None,
                     "assignee_id": None,
                     "assignee_ids": [],
@@ -4704,7 +4880,14 @@ class SchedulingStore:
                     "duration_days": days,
                     "required_headcount": headcount,
                     "staffing_gap": 0,
-                    "template_id": tpl["id"],
+                    "template_id": template_id,
+                    "process_id": spec.get("process_id"),
+                    "process_code": spec.get("process_code"),
+                    "est_minutes": (
+                        float(spec["est_minutes"])
+                        if spec.get("est_minutes") not in (None, "")
+                        else None
+                    ),
                     "plan_start": None,
                     "plan_end": None,
                     "actual_start": None,
@@ -4734,20 +4917,41 @@ class SchedulingStore:
                 raise ValidationException("已作废工单不可修改")
             if wo.get("status") == "done":
                 raise ValidationException("已完成工单不可修改")
-            for key in ("name", "product", "due_date", "priority"):
+            now = _now_iso()
+            actor = (payload.get("updated_by") or "").strip() or "系统"
+            if "due_date" in payload and payload["due_date"] is not None:
+                new_due = (payload.get("due_date") or "")[:10]
+                old_due = (wo.get("due_date") or "")[:10]
+                if new_due and new_due != old_due:
+                    if not wo.get("due_date_initial"):
+                        wo["due_date_initial"] = old_due or new_due
+                    wo["due_date"] = new_due
+                    wo["due_date_updated_at"] = now
+                    wo["due_date_updated_by"] = actor
+            for key in ("name", "product", "priority"):
                 if key in payload and payload[key] is not None:
                     wo[key] = payload[key]
+            if "plan_qty" in payload or "quantity" in payload:
+                pq = payload.get("plan_qty")
+                if pq is None:
+                    pq = payload.get("quantity")
+                if pq not in (None, ""):
+                    wo["plan_qty"] = float(pq)
+                    order = self._order_map().get(wo.get("order_id") or "")
+                    if order is not None:
+                        order["plan_qty"] = float(pq)
             if "wo_kind" in payload and payload["wo_kind"] is not None:
-                kind = payload["wo_kind"]
-                if kind not in WO_KIND_LABELS:
-                    raise ValidationException("工单类型无效")
+                kind, kind_label = _resolve_wo_kind(payload.get("wo_kind"))
                 wo["wo_kind"] = kind
+                wo["wo_kind_label"] = kind_label
             if "status" in payload and payload["status"] is not None:
                 # 状态变更请走作废等专用接口；此处仅允许 pending/producing 微调
                 st = payload["status"]
                 if st not in ("pending", "producing"):
                     raise ValidationException("状态请通过作废等操作变更")
                 wo["status"] = st
+            wo["updated_at"] = now
+            wo["updated_by"] = actor
             pri = wo.get("priority") or "normal"
             for op in self._data["operations"]:
                 if op["work_order_id"] != wo_id:
@@ -7491,6 +7695,23 @@ class SchedulingStore:
             end_m += 24 * 60
         return round((end_m - start_m) / 60.0, 2)
 
+    def find_person_by_name_code(self, name: str, code: str) -> dict[str, Any] | None:
+        """小程序识别：姓名+工号精确匹配启用人员。"""
+        name_n = (name or "").strip()
+        code_n = (code or "").strip().upper()
+        if not name_n or not code_n:
+            return None
+        with self._lock:
+            for p in self._data.get("persons") or []:
+                if p.get("status") == "disabled":
+                    continue
+                if (p.get("name") or "").strip() != name_n:
+                    continue
+                if str(p.get("code") or "").strip().upper() != code_n:
+                    continue
+                return deepcopy(p)
+        return None
+
     def list_shop_floor_reports(
         self,
         *,
@@ -7498,6 +7719,7 @@ class SchedulingStore:
         date_from: str | None = None,
         date_to: str | None = None,
         status: str | None = None,
+        person_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock:
             self._ensure_shop_floor_reports_unlocked()
@@ -7516,6 +7738,9 @@ class SchedulingStore:
                 rows = [r for r in rows if (r.get("work_date") or "")[:10] == d0]
             if status:
                 rows = [r for r in rows if r.get("status") == status]
+            if person_id:
+                pid = str(person_id).strip()
+                rows = [r for r in rows if str(r.get("person_id") or "") == pid]
             rows.sort(
                 key=lambda r: (
                     (r.get("work_date") or ""),
@@ -7922,25 +8147,42 @@ class SchedulingStore:
             }
             hints: list[dict[str, str]] = []
             seen_hint: set[str] = set()
-            for h in product_hints or []:
-                name = (h.get("product") or "").strip()
+
+            def _push_hint(name: str, *, code: str = "", last_process: str = "") -> None:
+                name = (name or "").strip()
                 if not name or name in seen_hint:
-                    continue
+                    return
                 seen_hint.add(name)
                 hints.append(
                     {
                         "product": name,
-                        "code": (h.get("code") or "").strip(),
-                        "last_process": (h.get("last_process") or last_map.get(name) or "").strip(),
+                        "code": (code or "").strip(),
+                        "last_process": (
+                            (last_process or "").strip() or last_map.get(name) or ""
+                        ).strip(),
                     }
+                )
+
+            for h in product_hints or []:
+                _push_hint(
+                    (h.get("product") or "").strip(),
+                    code=(h.get("code") or "").strip(),
+                    last_process=(h.get("last_process") or "").strip(),
                 )
             if not hints and last_map:
                 for name, last in last_map.items():
-                    if name in seen_hint:
-                        continue
-                    # last_map 含编码别名时可能重复；仅作兜底
-                    seen_hint.add(name)
-                    hints.append({"product": name, "code": "", "last_process": last})
+                    _push_hint(name, last_process=last)
+            # 手工登记下拉：补齐报工/工单/订单/已确认成品里出现过的产品，避免只有基础信息少数项
+            for r in self._data.get("shop_floor_reports") or []:
+                _push_hint(
+                    (r.get("product") or r.get("product_display") or "").strip(),
+                )
+            for w in self._data.get("work_orders") or []:
+                _push_hint((w.get("product") or "").strip())
+            for o in self._data.get("orders") or []:
+                _push_hint((o.get("product") or "").strip())
+            for c in self._data.get("shop_floor_finished") or []:
+                _push_hint((c.get("product") or "").strip())
             fam_names: dict[str, str] = {}
             for s in self._data.get("shifts") or []:
                 fid = s.get("family_id")
@@ -8061,8 +8303,39 @@ class SchedulingStore:
                 eq = (r.get("equipment_name") or "").strip() or "未填设备"
                 by_equipment[eq] = by_equipment.get(eq, 0) + qty
 
-            # 成品建议：末道工序（按产品）当日/区间已确认数量
+            # 成品建议：末道工序（按产品）当日/区间已确认数量；附带各班拆分与人/时
             finished_suggest: dict[str, dict[str, Any]] = {}
+
+            def _ensure_finished_bucket(
+                key: str,
+                *,
+                day: str,
+                product: str,
+                last_process: str,
+                suggested_qty: float = 0.0,
+            ) -> dict[str, Any]:
+                bucket = finished_suggest.get(key)
+                if bucket is None:
+                    bucket = {
+                        "work_date": day,
+                        "product": product,
+                        "last_process": last_process,
+                        "suggested_qty": 0.0,
+                        "_shift_qty": {},  # shift_name -> qty
+                        "_applicants": [],
+                        "_report_confirmers": [],
+                        "_submitted_ats": [],
+                        "_reviewed_ats": [],
+                    }
+                    finished_suggest[key] = bucket
+                if last_process and not bucket.get("last_process"):
+                    bucket["last_process"] = last_process
+                if suggested_qty:
+                    bucket["suggested_qty"] = float(bucket.get("suggested_qty") or 0) + float(
+                        suggested_qty
+                    )
+                return bucket
+
             for r in filtered:
                 if r.get("status") != "confirmed":
                     continue
@@ -8075,16 +8348,35 @@ class SchedulingStore:
                     continue
                 day = (r.get("work_date") or "")[:10]
                 key = f"{day}::{product}"
-                bucket = finished_suggest.setdefault(
-                    key,
-                    {
-                        "work_date": day,
-                        "product": product,
-                        "last_process": last,
-                        "suggested_qty": 0.0,
-                    },
+                bucket = _ensure_finished_bucket(
+                    key, day=day, product=product, last_process=last
                 )
-                bucket["suggested_qty"] += float(r.get("qty") or 0)
+                qty = float(r.get("qty") or 0)
+                bucket["suggested_qty"] = float(bucket.get("suggested_qty") or 0) + qty
+                sn = (r.get("_shift_name") or "").strip() or "未排班"
+                shift_qty = bucket.setdefault("_shift_qty", {})
+                shift_qty[sn] = float(shift_qty.get(sn) or 0) + qty
+                applicant = (
+                    (r.get("submitted_by") or "").strip()
+                    or (r.get("applicant_name") or "").strip()
+                    or (self._person_map().get(r.get("person_id") or "") or {}).get("name")
+                    or ""
+                )
+                if applicant:
+                    apps = bucket.setdefault("_applicants", [])
+                    if applicant not in apps:
+                        apps.append(applicant)
+                confirmer = (r.get("reviewed_by") or r.get("confirmer_name") or "").strip()
+                if confirmer:
+                    cfs = bucket.setdefault("_report_confirmers", [])
+                    if confirmer not in cfs:
+                        cfs.append(confirmer)
+                sat = (r.get("submitted_at") or "").strip()
+                if sat:
+                    bucket.setdefault("_submitted_ats", []).append(sat)
+                rat = (r.get("reviewed_at") or "").strip()
+                if rat:
+                    bucket.setdefault("_reviewed_ats", []).append(rat)
 
             confirms = [
                 c
@@ -8100,12 +8392,12 @@ class SchedulingStore:
                         if not finished_suggest[key].get("last_process") and h.get("last_process"):
                             finished_suggest[key]["last_process"] = h["last_process"]
                         continue
-                    finished_suggest[key] = {
-                        "work_date": day,
-                        "product": h["product"],
-                        "last_process": h.get("last_process") or "",
-                        "suggested_qty": 0.0,
-                    }
+                    _ensure_finished_bucket(
+                        key,
+                        day=day,
+                        product=h["product"],
+                        last_process=h.get("last_process") or "",
+                    )
             for c in confirms:
                 day = (c.get("work_date") or "")[:10]
                 product = (c.get("product") or "").strip()
@@ -8113,34 +8405,249 @@ class SchedulingStore:
                     continue
                 key = f"{day}::{product}"
                 if key not in finished_suggest:
-                    finished_suggest[key] = {
-                        "work_date": day,
-                        "product": product,
-                        "last_process": last_map.get(product) or "",
-                        "suggested_qty": float(c.get("suggested_qty") or 0),
-                    }
+                    _ensure_finished_bucket(
+                        key,
+                        day=day,
+                        product=product,
+                        last_process=last_map.get(product) or "",
+                        suggested_qty=float(c.get("suggested_qty") or 0),
+                    )
 
             confirmed_qty = sum(
-                float(c.get("confirmed_qty") or 0) for c in confirms if c.get("status") == "confirmed"
+                float(c.get("confirmed_qty") or 0)
+                for c in confirms
+                if (c.get("status") or "confirmed") == "confirmed"
             )
             suggest_list = sorted(
                 finished_suggest.values(),
                 key=lambda x: (x.get("work_date") or "", x.get("product") or ""),
             )
+            # 补齐：无末道映射时，仍按「产品×归属日」汇总各班产量与人/时（便于三班倒展示）
+            product_day_reports: dict[str, list[dict[str, Any]]] = {}
+            for r in filtered:
+                if r.get("status") != "confirmed":
+                    continue
+                product = (r.get("product") or r.get("product_display") or "").strip()
+                day = (r.get("work_date") or "")[:10]
+                if not product or not day:
+                    continue
+                product_day_reports.setdefault(f"{day}::{product}", []).append(r)
+
+            # 按班展开：三班倒 → 3 行；成品确认按班各填，日合计=各班已确认之和
+            shift_rows: list[dict[str, Any]] = []
             for s in suggest_list:
-                s["suggested_qty"] = round(float(s.get("suggested_qty") or 0), 2)
-                matched = next(
-                    (
-                        c
-                        for c in confirms
-                        if (c.get("work_date") or "")[:10] == s["work_date"]
-                        and (c.get("product") or "") == s["product"]
-                        and c.get("status") == "confirmed"
-                    ),
-                    None,
+                day_suggested = round(float(s.get("suggested_qty") or 0), 2)
+                day_confirms = [
+                    c
+                    for c in confirms
+                    if (c.get("work_date") or "")[:10] == s["work_date"]
+                    and (c.get("product") or "") == s["product"]
+                ]
+                day_confirmed_only = [
+                    c
+                    for c in day_confirms
+                    if (c.get("status") or "confirmed") == "confirmed"
+                ]
+                day_confirmed_sum = (
+                    round(
+                        sum(float(c.get("confirmed_qty") or 0) for c in day_confirmed_only),
+                        2,
+                    )
+                    if day_confirmed_only
+                    else None
                 )
-                s["confirmed_qty"] = float(matched["confirmed_qty"]) if matched else None
-                s["confirm_id"] = matched.get("id") if matched else None
+                # 清理内部累加字段
+                for k in (
+                    "_shift_qty",
+                    "_applicants",
+                    "_report_confirmers",
+                    "_submitted_ats",
+                    "_reviewed_ats",
+                ):
+                    s.pop(k, None)
+
+                key = f"{s.get('work_date')}::{s.get('product')}"
+                last = (s.get("last_process") or "").strip()
+                # 优先末道工序报工按班拆；否则该产品当日全部已确认报工
+                source_reports = [
+                    r
+                    for r in (product_day_reports.get(key) or [])
+                    if (not last) or ((r.get("process_name") or "").strip() == last)
+                ]
+                if not source_reports:
+                    source_reports = list(product_day_reports.get(key) or [])
+
+                by_shift_acc: dict[str, dict[str, Any]] = {}
+                for r in source_reports:
+                    sn = (r.get("_shift_name") or "").strip() or "未排班"
+                    fam = (r.get("_shift_family_id") or "").strip() or None
+                    acc = by_shift_acc.get(sn)
+                    if not acc:
+                        acc = {
+                            "shift_name": sn,
+                            "shift_family_id": fam,
+                            "qty": 0.0,
+                            "entries": [],
+                        }
+                        by_shift_acc[sn] = acc
+                    acc["qty"] += float(r.get("qty") or 0)
+                    applicant = (
+                        (r.get("submitted_by") or "").strip()
+                        or (r.get("applicant_name") or "").strip()
+                        or (self._person_map().get(r.get("person_id") or "") or {}).get("name")
+                        or ""
+                    )
+                    confirmer = (r.get("reviewed_by") or r.get("confirmer_name") or "").strip()
+                    acc["entries"].append(
+                        {
+                            "applicant": applicant,
+                            "confirmer": confirmer,
+                            "submitted_at": (r.get("submitted_at") or "").strip() or None,
+                            "reviewed_at": (r.get("reviewed_at") or "").strip() or None,
+                        }
+                    )
+
+                # 已按班确认但尚无报工的班次也要出一行
+                for c in day_confirms:
+                    sn = (c.get("shift_name") or "").strip() or "—"
+                    fam = (c.get("shift_family_id") or "").strip() or None
+                    if sn in by_shift_acc:
+                        if fam and not by_shift_acc[sn].get("shift_family_id"):
+                            by_shift_acc[sn]["shift_family_id"] = fam
+                        continue
+                    # 旧日级确认（无班次）落到「—」
+                    by_shift_acc[sn] = {
+                        "shift_name": sn,
+                        "shift_family_id": fam,
+                        "qty": 0.0,
+                        "entries": [],
+                    }
+
+                shift_items = sorted(by_shift_acc.values(), key=lambda x: x["shift_name"])
+                if not shift_items:
+                    # 无报工也无确认：一行便于手工按班登记（班次选填）
+                    shift_rows.append(
+                        {
+                            "work_date": s.get("work_date"),
+                            "product": s.get("product"),
+                            "last_process": s.get("last_process") or "",
+                            "shift_name": "—",
+                            "shift_family_id": None,
+                            "suggested_qty": day_suggested,
+                            "day_suggested_qty": day_suggested,
+                            "confirmed_qty": None,
+                            "day_confirmed_qty": day_confirmed_sum,
+                            "confirm_id": None,
+                            "status": None,
+                            "submitted_by": None,
+                            "submitted_at": None,
+                            "confirmed_by": None,
+                            "confirmed_at": None,
+                            "reject_note": None,
+                            "applicant_names": None,
+                            "shift_count": 0,
+                        }
+                    )
+                    continue
+
+                for acc in shift_items:
+                    entries = sorted(
+                        acc["entries"],
+                        key=lambda e: e.get("submitted_at") or "",
+                    )
+                    applicants = []
+                    for e in entries:
+                        if e.get("applicant") and e["applicant"] not in applicants:
+                            applicants.append(e["applicant"])
+                    first_sub = next(
+                        (e.get("submitted_at") for e in entries if e.get("submitted_at")),
+                        None,
+                    )
+                    sn_acc = (acc.get("shift_name") or "").strip()
+                    fam_acc = (acc.get("shift_family_id") or "").strip() or None
+                    row_keys = {
+                        self._finished_shift_key(
+                            shift_name=sn_acc, shift_family_id=fam_acc
+                        )
+                    }
+                    if sn_acc and sn_acc not in ("—", "-", "无"):
+                        row_keys.add(f"shift:{sn_acc}")
+                    if fam_acc:
+                        row_keys.add(f"fam:{fam_acc}")
+                    matched = next(
+                        (
+                            c
+                            for c in day_confirms
+                            if self._finished_shift_key(
+                                shift_name=c.get("shift_name"),
+                                shift_family_id=c.get("shift_family_id"),
+                            )
+                            in row_keys
+                        ),
+                        None,
+                    )
+                    fin_status = (matched.get("status") or "confirmed") if matched else None
+                    shift_qty = (
+                        float(matched["confirmed_qty"])
+                        if matched and matched.get("confirmed_qty") is not None
+                        else None
+                    )
+                    # 申请人/时间：成品单优先（手工登记），否则回落报工申请人
+                    sub_by = (
+                        ((matched.get("submitted_by") or "").strip() or None)
+                        if matched
+                        else None
+                    ) or (applicants[0] if applicants else None)
+                    sub_at = (
+                        ((matched.get("submitted_at") or "").strip() or None)
+                        if matched
+                        else None
+                    ) or first_sub
+                    # 确认人/时间：仅成品确认通过后
+                    fin_by = None
+                    fin_at = None
+                    if matched and fin_status == "confirmed":
+                        fin_by = (matched.get("confirmed_by") or "").strip() or None
+                        fin_at = (matched.get("confirmed_at") or "").strip() or None
+                    shift_rows.append(
+                        {
+                            "work_date": s.get("work_date"),
+                            "product": s.get("product"),
+                            "last_process": s.get("last_process") or "",
+                            "shift_name": acc["shift_name"],
+                            "shift_family_id": acc.get("shift_family_id"),
+                            "suggested_qty": round(float(acc["qty"]), 2),
+                            "day_suggested_qty": day_suggested,
+                            "confirmed_qty": shift_qty,
+                            "day_confirmed_qty": day_confirmed_sum,
+                            "confirm_id": matched.get("id") if matched else None,
+                            "status": fin_status,
+                            "submitted_by": sub_by,
+                            "applicant_names": (
+                                "、".join(applicants) if applicants else sub_by
+                            ),
+                            "submitted_at": sub_at,
+                            "first_submitted_at": sub_at,
+                            "confirmed_by": fin_by,
+                            "confirmed_at": fin_at,
+                            "reject_note": (
+                                (matched.get("reject_note") or matched.get("note") or "").strip()
+                                or None
+                            )
+                            if matched and fin_status == "rejected"
+                            else None,
+                            "shift_count": len(shift_items),
+                        }
+                    )
+
+            suggest_list = sorted(
+                shift_rows,
+                key=lambda x: (
+                    x.get("work_date") or "",
+                    x.get("product") or "",
+                    x.get("shift_name") or "",
+                ),
+            )
 
             process_total = round(sum(by_process.values()), 2)
             return {
@@ -8191,23 +8698,80 @@ class SchedulingStore:
                     "suggested": suggest_list,
                     "confirms": deepcopy(confirms),
                     "product_options": hints,
-                    "note": "",
+                    "note": "同日同产品合并；按班确认/修改/驳回；日合计=各班已确认之和。",
                 },
             }
 
+    @staticmethod
+    def _finished_shift_key(
+        *,
+        shift_name: str | None = None,
+        shift_family_id: str | None = None,
+    ) -> str:
+        """成品确认班次键：优先 family_id；无班次手工登记统一为空串。"""
+        fam = (shift_family_id or "").strip()
+        if fam:
+            return f"fam:{fam}"
+        sn = (shift_name or "").strip()
+        if not sn or sn in ("—", "-", "无"):
+            return ""
+        return f"shift:{sn}"
+
     def confirm_shop_floor_finished(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """成品产量确认：程序建议 + 人改数确认。"""
+        """成品产量（口径二·按班）。
+
+        action:
+        - apply：手工登记申请（pending，写入申请人/申请时间）
+        - confirm：确认本班（可带数量）
+        - modify：仅改数量（已确认/待确认）
+        - reject：驳回，须写明原因
+        """
         with self._lock:
             self._ensure_shop_floor_finished_unlocked()
             work_date = (payload.get("work_date") or "")[:10]
             product = (payload.get("product") or "").strip()
             if not work_date or not product:
                 raise ValidationException("请指定日期与产品")
-            qty = float(payload.get("confirmed_qty") if payload.get("confirmed_qty") is not None else 0)
-            if qty < 0:
-                raise ValidationException("成品数量不能为负")
+            action = (payload.get("action") or "confirm").strip().lower()
+            if action not in ("apply", "confirm", "modify", "reject"):
+                raise ValidationException("action 须为 apply / confirm / modify / reject")
+            note = (payload.get("note") or "").strip()
+            if action == "reject" and not note:
+                raise ValidationException("驳回请写明原因")
+
+            qty_raw = payload.get("confirmed_qty")
+            qty: float | None
+            if qty_raw is None or qty_raw == "":
+                qty = None
+            else:
+                qty = float(qty_raw)
+                if qty < 0:
+                    raise ValidationException("成品数量不能为负")
+            if action in ("apply", "confirm", "modify") and qty is None:
+                raise ValidationException("请填写成品数量")
+
             suggested = float(payload.get("suggested_qty") or 0)
+            shift_name_raw = (payload.get("shift_name") or "").strip()
+            shift_family_id = (payload.get("shift_family_id") or "").strip() or None
+            if shift_name_raw in ("—", "-", "无"):
+                shift_name_raw = ""
+            if shift_family_id and not shift_name_raw:
+                for s in self._data.get("shifts") or []:
+                    if str(s.get("family_id") or "") == shift_family_id:
+                        shift_name_raw = (s.get("name") or "").strip()
+                        break
+            shift_name = shift_name_raw or None
+            if not shift_name and not shift_family_id:
+                raise ValidationException("请指定班次")
+            target_key = self._finished_shift_key(
+                shift_name=shift_name, shift_family_id=shift_family_id
+            )
             now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            actor = (
+                (payload.get("confirmed_by") or payload.get("submitted_by") or "").strip()
+                or "车间主任"
+            )
+            applicant = (payload.get("submitted_by") or "").strip() or actor
             rows = self._data["shop_floor_finished"]
             existing = next(
                 (
@@ -8215,16 +8779,125 @@ class SchedulingStore:
                     for r in rows
                     if (r.get("work_date") or "")[:10] == work_date
                     and (r.get("product") or "") == product
-                    and r.get("status") == "confirmed"
+                    and self._finished_shift_key(
+                        shift_name=r.get("shift_name"),
+                        shift_family_id=r.get("shift_family_id"),
+                    )
+                    == target_key
+                    and (r.get("status") or "") in ("pending", "confirmed", "rejected")
                 ),
                 None,
             )
-            if existing:
+
+            def _touch_shift(row: dict[str, Any]) -> None:
+                row["shift_name"] = shift_name
+                row["shift_family_id"] = shift_family_id
+
+            if action == "apply":
+                if existing and existing.get("status") == "confirmed":
+                    raise ValidationException("该班次已确认，请用「修改」改数量或「驳回」")
+                if existing:
+                    existing["confirmed_qty"] = qty
+                    existing["suggested_qty"] = suggested
+                    existing["status"] = "pending"
+                    existing["submitted_by"] = applicant
+                    existing["submitted_at"] = now
+                    existing["confirmed_by"] = None
+                    existing["confirmed_at"] = None
+                    existing["reject_note"] = ""
+                    existing["rejected_by"] = None
+                    existing["rejected_at"] = None
+                    existing["note"] = note
+                    _touch_shift(existing)
+                    self._persist_unlocked()
+                    return deepcopy(existing)
+                rid = self._next_id("shop_floor_finished", "sff")
+                row = {
+                    "id": rid,
+                    "work_date": work_date,
+                    "product": product,
+                    "shift_name": shift_name,
+                    "shift_family_id": shift_family_id,
+                    "suggested_qty": suggested,
+                    "confirmed_qty": qty,
+                    "status": "pending",
+                    "submitted_by": applicant,
+                    "submitted_at": now,
+                    "confirmed_by": None,
+                    "confirmed_at": None,
+                    "reject_note": "",
+                    "note": note,
+                }
+                rows.append(row)
+                self._persist_unlocked()
+                return deepcopy(row)
+
+            if action == "modify":
+                if not existing:
+                    raise ValidationException("尚无成品记录，请先确认或手工登记")
+                if existing.get("status") == "rejected":
+                    raise ValidationException("已驳回记录不可直接改数，请重新登记或确认")
                 existing["confirmed_qty"] = qty
+                if payload.get("suggested_qty") is not None:
+                    existing["suggested_qty"] = suggested
+                existing["note"] = note or (existing.get("note") or "")
+                _touch_shift(existing)
+                self._persist_unlocked()
+                return deepcopy(existing)
+
+            if action == "reject":
+                if not existing:
+                    # 无记录时建一条驳回，便于表格留痕
+                    rid = self._next_id("shop_floor_finished", "sff")
+                    row = {
+                        "id": rid,
+                        "work_date": work_date,
+                        "product": product,
+                        "shift_name": shift_name,
+                        "shift_family_id": shift_family_id,
+                        "suggested_qty": suggested,
+                        "confirmed_qty": qty if qty is not None else 0,
+                        "status": "rejected",
+                        "submitted_by": applicant,
+                        "submitted_at": now,
+                        "confirmed_by": None,
+                        "confirmed_at": None,
+                        "rejected_by": actor,
+                        "rejected_at": now,
+                        "reject_note": note,
+                        "note": note,
+                    }
+                    rows.append(row)
+                    self._persist_unlocked()
+                    return deepcopy(row)
+                existing["status"] = "rejected"
+                existing["rejected_by"] = actor
+                existing["rejected_at"] = now
+                existing["reject_note"] = note
+                existing["note"] = note
+                existing["confirmed_by"] = None
+                existing["confirmed_at"] = None
+                _touch_shift(existing)
+                self._persist_unlocked()
+                return deepcopy(existing)
+
+            # confirm
+            if existing:
+                if qty is not None:
+                    existing["confirmed_qty"] = qty
                 existing["suggested_qty"] = suggested
-                existing["confirmed_by"] = (payload.get("confirmed_by") or "").strip() or "车间主任"
+                existing["status"] = "confirmed"
+                if not (existing.get("submitted_by") or "").strip():
+                    existing["submitted_by"] = applicant
+                if not (existing.get("submitted_at") or "").strip():
+                    existing["submitted_at"] = now
+                existing["confirmed_by"] = actor
                 existing["confirmed_at"] = now
-                existing["note"] = (payload.get("note") or "").strip()
+                existing["reject_note"] = ""
+                existing["rejected_by"] = None
+                existing["rejected_at"] = None
+                existing["note"] = note
+                _touch_shift(existing)
                 self._persist_unlocked()
                 return deepcopy(existing)
             rid = self._next_id("shop_floor_finished", "sff")
@@ -8232,12 +8905,17 @@ class SchedulingStore:
                 "id": rid,
                 "work_date": work_date,
                 "product": product,
+                "shift_name": shift_name,
+                "shift_family_id": shift_family_id,
                 "suggested_qty": suggested,
                 "confirmed_qty": qty,
                 "status": "confirmed",
-                "confirmed_by": (payload.get("confirmed_by") or "").strip() or "车间主任",
+                "submitted_by": applicant,
+                "submitted_at": now,
+                "confirmed_by": actor,
                 "confirmed_at": now,
-                "note": (payload.get("note") or "").strip(),
+                "reject_note": "",
+                "note": note,
             }
             rows.append(row)
             self._persist_unlocked()

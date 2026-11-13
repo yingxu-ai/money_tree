@@ -331,10 +331,17 @@ export interface WorkOrderItem {
   name: string;
   product: string;
   due_date: string;
+  due_date_initial?: string | null;
+  due_date_updated_at?: string | null;
+  due_date_updated_by?: string | null;
   priority: Priority;
   wo_kind?: string;
   wo_kind_label?: string;
   status: WorkOrderStatus;
+  created_at?: string | null;
+  created_by?: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
   op_count?: number;
   operations?: OperationItem[];
 }
@@ -1080,6 +1087,8 @@ export function createWorkOrder(payload: {
   due_date: string;
   priority?: string;
   wo_kind?: string;
+  code?: string;
+  order_code?: string;
   template_ids?: string[];
   op_specs?: Array<{
     template_id: string;
@@ -1296,6 +1305,195 @@ export function submitDailyLog(payload: {
     calibration?: { message?: string } | null;
     message: string;
   }>("/scheduling/report/daily-log", payload);
+}
+
+/** 免排产生产日报（员工提交 → 主任确认） */
+export type ShopFloorReportStatus = "pending" | "confirmed" | "rejected" | string;
+
+export interface ShopFloorReportItem {
+  id: string;
+  work_date: string;
+  status: ShopFloorReportStatus;
+  status_label?: string;
+  link_type: "work_order" | "product" | string;
+  link_type_label?: string;
+  work_order_id?: string | null;
+  work_order_label?: string | null;
+  order_id?: string | null;
+  product?: string;
+  product_display?: string;
+  process_name: string;
+  template_id?: string | null;
+  qty: number;
+  hours?: number;
+  start_time?: string | null;
+  end_time?: string | null;
+  person_id: string;
+  person_name?: string;
+  equipment_id?: string | null;
+  equipment_name?: string;
+  note?: string;
+  submitted_at?: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  review_note?: string;
+  work_order_code?: string;
+  work_order_name?: string;
+  order_code?: string;
+  order_name?: string;
+  order_due_date?: string;
+}
+
+export interface ShopFloorReportsResponse {
+  kpis: KpiItem[];
+  items: ShopFloorReportItem[];
+  persons: PersonItem[];
+  equipments: EquipmentItem[];
+  templates: TemplateItem[];
+  product_options?: string[];
+  work_orders: WorkOrderItem[];
+  today?: string;
+}
+
+export interface ShopFloorShiftHint {
+  found: boolean;
+  work_date: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  shift_name?: string | null;
+  shift_family_id?: string | null;
+  message?: string | null;
+}
+
+export interface ShopFloorProgressItem {
+  id: string;
+  link_type: "work_order" | "product" | string;
+  link_type_label?: string;
+  work_order_id?: string | null;
+  work_order_code?: string | null;
+  work_order_name?: string | null;
+  work_order_label?: string | null;
+  product?: string;
+  due_date?: string | null;
+  days_to_due?: number | null;
+  wo_status?: string | null;
+  total_confirmed_qty: number;
+  processes: Array<{ process_name: string; qty: number; hours?: number }>;
+  current_process?: string | null;
+  current_holder?: string | null;
+  last_report_at?: string | null;
+  has_reports?: boolean;
+}
+
+/** 订单进度：由工单上的已确认日报上卷 */
+export interface ShopFloorOrderProgressItem {
+  id: string;
+  order_id: string;
+  order_code?: string;
+  order_name?: string;
+  product?: string;
+  due_date?: string | null;
+  days_to_due?: number | null;
+  order_status?: string;
+  work_order_count?: number;
+  work_order_codes?: string[];
+  total_confirmed_qty: number;
+  processes: Array<{ process_name: string; qty: number; hours?: number }>;
+  current_process?: string | null;
+  current_holder?: string | null;
+  last_report_at?: string | null;
+  has_reports?: boolean;
+}
+
+export interface ShopFloorProgressResponse {
+  as_of: string;
+  note?: string;
+  /** @deprecated 同 work_orders */
+  items: ShopFloorProgressItem[];
+  work_orders?: ShopFloorProgressItem[];
+  orders?: ShopFloorOrderProgressItem[];
+  unlinked_product_reports?: number;
+}
+
+export function fetchShopFloorReports(params?: { work_date?: string; status?: string }) {
+  const q = new URLSearchParams();
+  if (params?.work_date) q.set("work_date", params.work_date);
+  if (params?.status) q.set("status", params.status);
+  const qs = q.toString();
+  return getData<ShopFloorReportsResponse>(
+    `/scheduling/shop-floor-reports${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function fetchShopFloorProgress() {
+  return getData<ShopFloorProgressResponse>("/scheduling/shop-floor-reports/progress");
+}
+
+export function fetchShopFloorShiftHint(personId: string, workDate?: string) {
+  const q = new URLSearchParams({ person_id: personId });
+  if (workDate) q.set("work_date", workDate);
+  return getData<ShopFloorShiftHint>(`/scheduling/shop-floor-reports/shift-hint?${q}`);
+}
+
+export function submitShopFloorReport(payload: {
+  work_date?: string;
+  person_id: string;
+  process_name?: string;
+  template_id?: string;
+  qty: number;
+  hours?: number;
+  start_time?: string;
+  end_time?: string;
+  link_type?: string;
+  work_order_id?: string;
+  work_order_label?: string;
+  product?: string;
+  equipment_id?: string;
+  equipment_name?: string;
+  note?: string;
+}) {
+  return postData<ShopFloorReportItem>("/scheduling/shop-floor-reports", payload);
+}
+
+export function submitShopFloorReportsBatch(payload: {
+  person_id: string;
+  work_date?: string;
+  rows: Array<{
+    process_name?: string;
+    template_id?: string;
+    qty: number;
+    hours?: number;
+    start_time?: string;
+    end_time?: string;
+    link_type?: string;
+    work_order_id?: string;
+    work_order_label?: string;
+    product?: string;
+    equipment_id?: string;
+    equipment_name?: string;
+    note?: string;
+  }>;
+}) {
+  return postData<{ ok: boolean; count: number; items: ShopFloorReportItem[] }>(
+    "/scheduling/shop-floor-reports/batch",
+    payload,
+  );
+}
+
+export function reviewShopFloorReport(
+  reportId: string,
+  payload: { action: "confirm" | "reject"; reviewer?: string; note?: string },
+) {
+  return postData<ShopFloorReportItem>(
+    `/scheduling/shop-floor-reports/${reportId}/review`,
+    payload,
+  );
+}
+
+export function deleteShopFloorReport(reportId: string) {
+  return deleteData<{ ok: boolean; deleted_id: string }>(
+    `/scheduling/shop-floor-reports/${reportId}`,
+  );
 }
 
 export function deleteDailyLog(logId: string) {

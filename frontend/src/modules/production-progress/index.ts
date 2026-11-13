@@ -1,0 +1,1 @@
+export { productionProgressModule } from "./register";

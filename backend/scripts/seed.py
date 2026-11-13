@@ -78,6 +78,7 @@ PERMISSIONS = [
     ("production_progress:view", "查看生产进度", "production_progress", "view"),
     ("production_progress:report", "生产进度报工", "production_progress", "report"),
     ("production_progress:review", "生产进度日报确认", "production_progress", "review"),
+    ("progress_analytics:view", "多维生产分析", "progress_analytics", "view"),
     ("tenant:view", "查看租户", "tenant", "view"),
     ("tenant:create", "创建租户", "tenant", "create"),
     ("tenant:update", "更新租户", "tenant", "update"),
@@ -122,6 +123,7 @@ MENUS = [
     (88, 80, "工单管理", "/production-progress/orders", "production-progress/WorkOrders", "MENU", 2, "UnorderedListOutlined"),
     (89, 80, "每日报工", "/production-progress/daily", "production-progress/DailyReport", "MENU", 3, "FormOutlined"),
     (90, 80, "进度分析", "/production-progress/analysis", "production-progress/ProgressAnalysis", "MENU", 4, "FundOutlined"),
+    (92, 80, "多维分析", "/progress-analytics", "progress-analytics/Workbench", "MENU", 5, "ApartmentOutlined"),
     # 工具箱（前端测算工具，可继续加子菜单）
     (70, None, "工具箱", None, None, "CATALOG", 8, "ToolOutlined"),
     (71, 70, "电石质检 ROI", "/tools/calcium-roi", "tools/calcium-roi/CalciumRoi", "MENU", 1, "CalculatorOutlined"),
@@ -635,7 +637,7 @@ async def _sync_tenant_admin_role(session) -> None:
         session,
         role,
         # 1=系统管理目录（否则 users/depts 等子菜单挂不上树）
-        menu_ids={1, 2, 3, 10, 11, 60, 61, 62, 63, 64, 65, 80, 81, 88, 89, 90, 91},
+        menu_ids={1, 2, 3, 10, 11, 60, 61, 62, 63, 64, 65, 80, 81, 88, 89, 90, 91, 92},
         perm_codes={
             "user:view",
             "user:create",
@@ -660,6 +662,7 @@ async def _sync_tenant_admin_role(session) -> None:
             "production_progress:view",
             "production_progress:report",
             "production_progress:review",
+            "progress_analytics:view",
         },
     )
     await _ensure_role_api_from_perm_codes(
@@ -689,6 +692,7 @@ async def _sync_tenant_admin_role(session) -> None:
             "production_progress:view",
             "production_progress:report",
             "production_progress:review",
+            "progress_analytics:view",
         },
     )
 
@@ -698,10 +702,10 @@ async def _sync_tenants_and_sku_demo(session) -> None:
     from datetime import datetime
 
     demos = [
-        (1, "样板客户（全模块）", "template", "*", "内置样板租户，用于全功能验收"),
-        (2, "客户A（仅排产）", "customer_a", "scheduling", "示例：仅开通生产排产模块"),
+        (1, "样板客户（全模块）", "template", "*", "内置样板租户，用于全功能验收", "GSDEMO01"),
+        (2, "客户A（仅排产）", "customer_a", "scheduling", "示例：仅开通生产排产模块", "GSCUSTA1"),
     ]
-    for tid, name, code, modules, remark in demos:
+    for tid, name, code, modules, remark, factory_code in demos:
         row = (
             await session.execute(select(SysTenant).where(SysTenant.id == tid))
         ).scalar_one_or_none()
@@ -711,6 +715,7 @@ async def _sync_tenants_and_sku_demo(session) -> None:
                     id=tid,
                     name=name,
                     code=code,
+                    factory_code=factory_code,
                     enabled_modules=modules,
                     status="active",
                     remark=remark,
@@ -719,6 +724,8 @@ async def _sync_tenants_and_sku_demo(session) -> None:
         else:
             row.name = name
             row.code = code
+            if not (row.factory_code or "").strip():
+                row.factory_code = factory_code
             row.enabled_modules = modules
             row.status = "active"
             row.remark = remark

@@ -1,4 +1,6 @@
 import { schedulingModule } from "@/modules/scheduling/register";
+import { productionProgressModule } from "@/modules/production-progress/register";
+import { progressAnalyticsModule } from "@/modules/progress-analytics/register";
 import { toolboxModule } from "@/modules/toolbox/register";
 import { systemModule } from "@/modules/system/register";
 import { dashboardModule } from "@/modules/dashboard/register";
@@ -11,6 +13,8 @@ const ALL_MODULES = [
   dashboardModule,
   equipmentAnalysisModule,
   schedulingModule,
+  productionProgressModule,
+  progressAnalyticsModule,
   toolboxModule,
 ];
 

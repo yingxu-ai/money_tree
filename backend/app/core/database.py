@@ -62,6 +62,11 @@ async def _ensure_sqlite_columns(conn) -> None:
         if "menu_id" not in api_cols:
             await conn.execute(text("ALTER TABLE sys_api_permission ADD COLUMN menu_id INTEGER"))
 
+    tenant_info = await conn.execute(text("PRAGMA table_info(sys_tenant)"))
+    tenant_cols = {row[1] for row in tenant_info.fetchall()}
+    if tenant_cols and "factory_code" not in tenant_cols:
+        await conn.execute(text("ALTER TABLE sys_tenant ADD COLUMN factory_code VARCHAR(32)"))
+
 
 async def init_db() -> None:
     async with engine.begin() as conn:

@@ -13,6 +13,8 @@ class SysTenant(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(max_length=128)
     code: str = Field(index=True, unique=True, max_length=64)
+    # 车间厂码（小程序扫码 scene）；每租户一张，对工人不可见编码入口
+    factory_code: str | None = Field(default=None, index=True, unique=True, max_length=32)
     # "*" / "all" = 全开；否则逗号分隔 module_id，如 scheduling,toolbox
     enabled_modules: str = Field(default="*", max_length=512)
     status: str = Field(default="active", max_length=32)

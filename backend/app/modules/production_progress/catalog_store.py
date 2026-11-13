@@ -223,6 +223,18 @@ class CatalogStore:
         seq[key] = n
         return f"{prefix}-{n}"
 
+    @staticmethod
+    def _apply_audit(row: dict[str, Any], payload: dict[str, Any], *, creating: bool) -> None:
+        now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        actor = (
+            (payload.get("updated_by") or payload.get("created_by") or "").strip() or "系统"
+        )
+        if creating or not row.get("created_at"):
+            row["created_at"] = now
+            row["created_by"] = (payload.get("created_by") or actor).strip() or "系统"
+        row["updated_at"] = now
+        row["updated_by"] = actor
+
     def _process_map(self) -> dict[str, dict]:
         return {p["id"]: p for p in (self._data.get("processes") or [])}
 
@@ -240,11 +252,13 @@ class CatalogStore:
             if not name or not code:
                 raise ValidationException("请填写工序编码与名称")
             rows = self._data.setdefault("processes", [])
+            creating = False
             if process_id:
                 row = next((r for r in rows if r["id"] == process_id), None)
                 if not row:
                     raise NotFoundException("工序不存在")
             else:
+                creating = True
                 row = {"id": self._next_id("process", "pp-proc")}
                 rows.append(row)
             row.update(
@@ -256,6 +270,7 @@ class CatalogStore:
                     "note": (payload.get("note") or "").strip(),
                 }
             )
+            self._apply_audit(row, payload, creating=creating)
             self._persist()
             return deepcopy(row)
 
@@ -340,8 +355,9 @@ class CatalogStore:
             if not name or not code:
                 raise ValidationException("请填写产品编码与名称")
             steps_in = payload.get("steps") or []
-            if not isinstance(steps_in, list) or not steps_in:
-                raise ValidationException("请至少配置一道工序")
+            if not isinstance(steps_in, list):
+                raise ValidationException("工序配置格式无效")
+            # 允许暂无工艺（工单里快速新增产品）；完整工艺可在产品页补全
             pmap = self._process_map()
             steps: list[dict[str, Any]] = []
             for i, raw in enumerate(steps_in):
@@ -352,7 +368,7 @@ class CatalogStore:
                     raise ValidationException(f"第 {i + 1} 道工序不存在")
                 qty = float(raw.get("qty") or 0)
                 if qty <= 0:
-                    raise ValidationException(f"第 {i + 1} 道件数须大于 0")
+                    raise ValidationException(f"第 {i + 1} 道工序数量须大于 0")
                 unit_minutes = float(
                     raw.get("unit_minutes")
                     if raw.get("unit_minutes") is not None
@@ -367,11 +383,13 @@ class CatalogStore:
                     }
                 )
             rows = self._data.setdefault("products", [])
+            creating = False
             if product_id:
                 row = next((r for r in rows if r["id"] == product_id), None)
                 if not row:
                     raise NotFoundException("产品不存在")
             else:
+                creating = True
                 row = {"id": self._next_id("product", "pp-prod")}
                 rows.append(row)
             row.update(
@@ -384,6 +402,7 @@ class CatalogStore:
                     "steps": steps,
                 }
             )
+            self._apply_audit(row, payload, creating=creating)
             self._persist()
             return self._enrich_product(row)
 
